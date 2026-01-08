@@ -3,8 +3,8 @@ import { extractSentences, buildSpatialIndex, findSentenceAtPoint } from './text
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 
 const mockTextItems: TextItem[] = [
-  { str: 'This is the first sentence. ', dir: 'ltr', width: 100, height: 20, transform: [1, 0, 0, 1, 10, 10], fontName: 'g_d0_f1' },
-  { str: 'This is the second sentence!', dir: 'ltr', width: 100, height: 20, transform: [1, 0, 0, 1, 10, 40], fontName: 'g_d0_f1' },
+  { str: 'This is the first sentence. ', dir: 'ltr', width: 100, height: 20, transform: [1, 0, 0, 1, 10, 10], fontName: 'g_d0_f1', hasEOL: false },
+  { str: 'This is the second sentence!', dir: 'ltr', width: 100, height: 20, transform: [1, 0, 0, 1, 10, 60], fontName: 'g_d0_f1', hasEOL: false },
 ];
 
 describe('textUtils', () => {

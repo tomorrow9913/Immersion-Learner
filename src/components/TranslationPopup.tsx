@@ -1,4 +1,4 @@
-import { useEffect, useState, forwardRef } from 'react';
+import { useEffect, useState, forwardRef, useLayoutEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -29,8 +29,9 @@ const TranslationPopup = forwardRef<HTMLDivElement, TranslationPopupProps>(({
   onReloadPage,
   position,
   onClose,
-}, ref) => {
+}) => {
   const [showCheckmark, setShowCheckmark] = useState(false);
+  const internalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isSaved && !showCheckmark) {
@@ -38,7 +39,28 @@ const TranslationPopup = forwardRef<HTMLDivElement, TranslationPopupProps>(({
       const timer = setTimeout(() => setShowCheckmark(false), 1500);
       return () => clearTimeout(timer);
     }
-  }, [isSaved]);
+  }, [isSaved, showCheckmark]); // Added showCheckmark to dependencies
+
+  useLayoutEffect(() => {
+    const element = internalRef.current;
+    if (!element) return;
+
+    const rect = element.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+
+    // 1. 하단 충돌 감지 (화면 아래로 뚫고 나가는지)
+    if (rect.bottom > viewportHeight) {
+      const overflow = rect.bottom - viewportHeight;
+      element.style.top = `${position.top - overflow - 20}px`; // 20px 여유
+    }
+
+    // 2. 우측 충돌 감지
+    if (rect.right > viewportWidth) {
+      const overflowX = rect.right - viewportWidth;
+      element.style.left = `${position.left - overflowX - 20}px`;
+    }
+  }, [position, translation, wordDetails]);
 
   if (!selectedText || !showTranslation) return null;
 
@@ -46,7 +68,7 @@ const TranslationPopup = forwardRef<HTMLDivElement, TranslationPopupProps>(({
 
   return (
     <div
-      ref={ref}
+      ref={internalRef} // ref 연결
       id="translate-popup"
       style={{
         position: 'fixed',
