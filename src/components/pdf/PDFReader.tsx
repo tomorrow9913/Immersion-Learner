@@ -6,12 +6,14 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import { PDF_CONFIG } from '@/config/constants';
 
 import { useTranslation } from '@/hooks/useTranslation';
+import { useTextSelection } from '@/hooks/useTextSelection';
+import { useMultiAlert } from '@/hooks/useMultiAlert';
 import { usePDFStorage } from '@/hooks/usePDFStorage';
 import { extractOutlineDirectly } from '@/utils/outlineUtils';
 
 import type { OutlineItem } from '@/types';
 import { Sidebar, PDFViewer, PDFControls } from './';
-import { FileDropArea } from '@/components/common';
+import { FileDropArea, MultiStackAlert } from '@/components/common';
 import { TranslationPopup } from '../';
 
 const PDFReader = () => {
@@ -23,10 +25,8 @@ const PDFReader = () => {
     const [outline, setOutline] = useState<OutlineItem[]>([]);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isDragOver, setIsDragOver] = useState(false);
-    const [position, setPosition] = useState({ top: 0, left: 0 });
 
     const {
-        selectedText,
         translation,
         isTranslating,
         isSaved,
@@ -34,9 +34,21 @@ const PDFReader = () => {
         showTranslation,
         translateText,
         addToWordbook,
-        setSelectedText,
         resetTranslation
     } = useTranslation();
+
+    const {
+        selection: textSelection,
+        popupPosition,
+        isSelecting,
+        clearSelection
+    } = useTextSelection();
+
+    const {
+        alerts,
+        addAlert,
+        clearAlert
+    } = useMultiAlert();
 
     const {
         recentFiles,
@@ -64,6 +76,19 @@ const PDFReader = () => {
         console.log('File state changed:', file ? 'File set' : 'No file');
     }, [file]);
 
+    useEffect(() => {
+        if (isSelecting && textSelection.text && !showTranslation) {
+            translateText(textSelection.text).catch((error) => {
+                if (error.message?.includes('Extension context invalidated') || 
+                    error.message?.includes('확장 프로그램이 업데이트되었습니다')) {
+                    addAlert('확장 프로그램이 업데이트되었습니다. 페이지를 새로고침 해주세요.', 'destructive');
+                } else {
+                    addAlert(error.message || '번역 오류가 발생했습니다.', 'destructive');
+                }
+            });
+        }
+    }, [isSelecting, textSelection.text, showTranslation, translateText, addAlert]);
+
     const onDocumentLoadSuccess = (pdf: PDFDocumentProxy) => {
         console.log('PDF loaded successfully, pages:', pdf.numPages);
         setNumPages(pdf.numPages);
@@ -72,7 +97,7 @@ const PDFReader = () => {
 
     const onDocumentLoadError = (error: Error) => {
         console.error('PDF loading error:', error);
-        alert(`PDF 로딩 실패: ${error.message}\n\n파일이 손상되지 않았는지 확인해주세요.`);
+        addAlert(`PDF 로딩 실패: ${error.message}\n파일이 손상되지 않았는지 확인해주세요.`, 'destructive');
     };
 
     const handleOutlineClick = (dest: any, _title: string, pageNumber?: number) => {
@@ -122,6 +147,7 @@ const PDFReader = () => {
             
             setPageNumber(1);
             resetTranslation();
+            clearSelection();
             setOutline([]);
         }
     };
@@ -135,6 +161,7 @@ const PDFReader = () => {
             
             setPageNumber(1);
             resetTranslation();
+            clearSelection();
             setOutline([]);
         }
     };
@@ -153,128 +180,36 @@ const PDFReader = () => {
         
         setPageNumber(1);
         resetTranslation();
+        clearSelection();
         setOutline([]);
     };
 
-    useEffect(() => {
-        let debounceTimer: number;
-        let isProcessing = false;
-        let isDragging = false;
-        let lastTranslationTime = 0;
-
-        const throttledTranslate = (text: string) => {
-            const now = Date.now();
-            
-            if (isProcessing) {
-                return;
-            }
-
-            setSelectedText(text);
-            translateText(text);
-            isProcessing = true;
-            
-            if (isDragging) {
-                lastTranslationTime = now;
-            }
-            
-            debounceTimer = setTimeout(() => {
-                isProcessing = false;
-            }, isDragging ? 800 : 300);
-        };
-
-        const handleMouseUp = (e: MouseEvent) => {
-            const target = e.target as HTMLElement;
-            if (target.closest('#translate-popup') || target.closest('#translate-button')) return;
-            
-            if (debounceTimer) {
-                clearTimeout(debounceTimer);
-            }
-            
-            isDragging = false;
-            
-            const selection = window.getSelection();
-            
-            if (!selection || selection.toString().trim().length === 0) {
-                resetTranslation();
-                return;
-            }
-
-            const range = selection.getRangeAt(0);
-            const rect = range.getBoundingClientRect();
-            setPosition({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX });
-            
-            const text = selection.toString().trim();
-            if (text === selectedText && showTranslation) {
-                return; 
-            }
-
-            throttledTranslate(text);
-        };
-
-        const handleMouseMove = (_e: MouseEvent) => {
-            if (!isDragging) return;
-            
-            const now = Date.now();
-            
-            const selection = window.getSelection();
-            if (!selection || selection.toString().trim().length === 0) return;
-            
-            const text = selection.toString().trim();
-            if (text !== selectedText || !showTranslation) {
-                if (now - lastTranslationTime > 100) {
-                    throttledTranslate(text);
-                }
-            }
-        };
-
-        const handleMouseDown = () => {
-            isDragging = true;
-        };
-
-        const handleMouseUpGlobal = () => {
-            isDragging = false;
-        };
-
-        const handleSelectionChange = () => {
-            const selection = window.getSelection();
-            if (!selection || selection.toString().trim().length === 0) {
-                resetTranslation();
-            }
-        };
-
-        document.addEventListener('mouseup', handleMouseUp);
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mousedown', handleMouseDown);
-        document.addEventListener('mouseup', handleMouseUpGlobal);
-        document.addEventListener('selectionchange', handleSelectionChange);
-        
-        return () => {
-            document.removeEventListener('mouseup', handleMouseUp);
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mousedown', handleMouseDown);
-            document.removeEventListener('mouseup', handleMouseUpGlobal);
-            document.removeEventListener('selectionchange', handleSelectionChange);
-            if (debounceTimer) {
-                clearTimeout(debounceTimer);
-            }
-        };
-    }, [selectedText, showTranslation, setSelectedText, translateText, resetTranslation]);
-
     const handleAddToWordbook = () => {
-        addToWordbook(selectedText, translation);
+        addToWordbook(textSelection.text, translation);
+        clearSelection();
+    };
+
+    const handlePageReload = () => {
+        window.location.reload();
     };
 
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden">
+            <MultiStackAlert 
+                alerts={alerts}
+                onClearAlert={clearAlert}
+            />
+            
             <TranslationPopup
-                position={position}
-                selectedText={selectedText}
+                position={popupPosition || { top: 0, left: 0 }}
+                selectedText={textSelection.text}
                 translation={translation}
                 isTranslating={isTranslating}
                 isSaved={isSaved}
                 wordDetails={wordDetails}
                 showTranslation={showTranslation}
                 onAddToWordbook={handleAddToWordbook}
+                onReloadPage={handlePageReload}
             />
             
             {!file ? (

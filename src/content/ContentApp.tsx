@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import TranslationPopup from '@/components/TranslationPopup';
+import { MultiStackAlert } from '@/components/common';
+import { useMultiAlert } from '@/hooks/useMultiAlert';
 
 const ContentApp = () => {
   const [selectedText, setSelectedText] = useState('');
@@ -17,11 +19,15 @@ const ContentApp = () => {
   const DRAG_THRESHOLD = 5;
   const debounceTimerRef = useRef<number | null>(null);
 
+  const { alerts, addAlert, clearAlert } = useMultiAlert();
+
   const translateText = useCallback(async (text: string) => {
+    setIsLoading(true);
     try {
       if (!chrome.runtime?.id) {
         console.error('Extension context invalidated');
-        return { success: false, error: 'Extension context invalidated. Please refresh the page.' };
+        addAlert('확장 프로그램이 업데이트되었습니다. 페이지를 새로고침 해주세요.', 'destructive');
+        return;
       }
 
       const response = await chrome.runtime.sendMessage({
@@ -31,28 +37,39 @@ const ContentApp = () => {
 
       if (chrome.runtime.lastError) {
         console.error('Chrome runtime error:', chrome.runtime.lastError);
-        return { success: false, error: 'Translation service unavailable. Please try again.' };
+        addAlert('번역 서비스를 사용할 수 없습니다. 다시 시도해주세요.', 'destructive');
+        return;
       }
 
       if (response?.success && response.translatedText) {
+        setTranslation(response.translatedText);
+        
         const dictResponse = await chrome.runtime.sendMessage({
           type: 'GET_WORD_DETAILS',
           text: text
         });
         
-        return { 
-          success: true, 
-          translatedText: response.translatedText,
-          wordDetails: dictResponse?.success ? dictResponse.data : null
-        };
+        if (dictResponse?.success) {
+          setWordDetails(dictResponse.data);
+        }
       } else {
-        return { success: false, error: response?.error || 'Translation failed.' };
+        const errorMessage = response?.error || '번역에 실패했습니다.';
+        setTranslation(errorMessage);
+        
+        if (errorMessage.includes('Extension context') || 
+            errorMessage.includes('확장 프로그램이 업데이트되었습니다')) {
+          addAlert(errorMessage, 'destructive');
+        }
       }
     } catch (error) {
       console.error('Error sending translation request:', error);
-      return { success: false, error: 'Failed to send translation request.' };
+      const errorMessage = error instanceof Error ? error.message : '번역 요청 실패';
+      setTranslation(errorMessage);
+      addAlert(errorMessage, 'destructive');
+    } finally {
+      setIsLoading(false);
     }
-  }, []);
+  }, [addAlert]);
 
   const showTranslationPopup = useCallback((text: string, rect: DOMRect) => {
     const top = rect.bottom + window.scrollY + 10;
@@ -109,6 +126,8 @@ const ContentApp = () => {
             const rect = range.getBoundingClientRect();
             
             showTranslationPopup(text, rect);
+          } else {
+            hideTranslationPopup();
           }
         }
       }
@@ -131,21 +150,12 @@ const ContentApp = () => {
 
   useEffect(() => {
     if (selectedText && showTranslation) {
-      setIsLoading(true);
-      
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
       
       debounceTimerRef.current = setTimeout(async () => {
-        const result = await translateText(selectedText);
-        if (result.success) {
-          setTranslation(result.translatedText);
-          setWordDetails(result.wordDetails);
-        } else {
-          setTranslation(result.error || 'Translation failed.');
-        }
-        setIsLoading(false);
+        await translateText(selectedText);
         debounceTimerRef.current = null;
       }, 200);
     }
@@ -178,18 +188,25 @@ const ContentApp = () => {
   }, [hideTranslationPopup]);
    
   return (
-    <TranslationPopup
-      ref={popupRef}
-      position={position}
-      selectedText={selectedText}
-      translation={translation}
-      isTranslating={isLoading}
-      isSaved={isSaved}
-      wordDetails={wordDetails}
-      showTranslation={showTranslation}
-      onAddToWordbook={handleAddToWordbook}
-      onReloadPage={handleClickOutside}
-    />
+    <>
+      <MultiStackAlert 
+        alerts={alerts}
+        onClearAlert={clearAlert}
+      />
+      
+      <TranslationPopup
+        ref={popupRef}
+        position={position}
+        selectedText={selectedText}
+        translation={translation}
+        isTranslating={isLoading}
+        isSaved={isSaved}
+        wordDetails={wordDetails}
+        showTranslation={showTranslation}
+        onAddToWordbook={handleAddToWordbook}
+        onReloadPage={handleClickOutside}
+      />
+    </>
   );
 };
 
