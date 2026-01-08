@@ -1,127 +1,82 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { UI_CONFIG } from '@/config/constants';
 
 interface TextSelectionState {
-  selection: { text: string, range: Range | null };
-  popupPosition: { top: number, left: number } | null;
-  isSelecting: boolean;
+  selection: { text: string; range: Range | null };
+  popupPosition: { top: number; left: number } | null;
 }
 
 export const useTextSelection = () => {
   const [state, setState] = useState<TextSelectionState>({
     selection: { text: '', range: null },
     popupPosition: null,
-    isSelecting: false
   });
-
-  const isDragging = useRef(false);
-  const dragStartX = useRef(0);
-  const dragStartY = useRef(0);
-  const DRAG_THRESHOLD = 5;
+  const debounceTimer = useRef<number | null>(null);
 
   const clearSelection = useCallback(() => {
-    window.getSelection()?.removeAllRanges();
+    if (window.getSelection) {
+      window.getSelection()?.removeAllRanges();
+    }
     setState({
       selection: { text: '', range: null },
       popupPosition: null,
-      isSelecting: false
     });
   }, []);
 
-  const handleMouseDown = useCallback((e: MouseEvent) => {
-    isDragging.current = false;
-    dragStartX.current = e.clientX;
-    dragStartY.current = e.clientY;
-  }, []);
+  const handleMouseUp = useCallback(() => {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isDragging.current) {
-      const dx = Math.abs(e.clientX - dragStartX.current);
-      const dy = Math.abs(e.clientY - dragStartY.current);
-      if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) {
-        isDragging.current = true;
-        
-        const selection = window.getSelection();
-        const text = selection?.toString().trim();
-        
-        if (text && text.length > 0 && selection) {
-          const range = selection.getRangeAt(0);
+    debounceTimer.current = window.setTimeout(() => {
+      const selection = window.getSelection();
+      const selectedText = selection?.toString().trim();
+      
+      const popupElement = document.getElementById('translate-popup');
+      if (popupElement && selection?.containsNode(popupElement, true)) {
+        return;
+      }
+
+      if (selectedText && selectedText.length > 0) {
+        try {
+          const range = selection!.getRangeAt(0);
           const rect = range.getBoundingClientRect();
           
-          const popupPosition = {
-            top: rect.bottom + window.scrollY + 10,
-            left: rect.left + window.scrollX
-          };
-          
           setState({
-            selection: { text, range },
-            popupPosition,
-            isSelecting: true
+            selection: { text: selectedText, range },
+            popupPosition: {
+              top: rect.bottom + window.scrollY + UI_CONFIG.TRANSLATION_POPUP.OFFSET,
+              left: rect.left + window.scrollX,
+            },
           });
-        } else {
-          setState(prev => ({ ...prev, popupPosition: null, isSelecting: false }));
+        } catch (error) {
+          console.error('오류 처리 중 선택 실패:', error);
+          clearSelection();
+        }
+      } else {
+        // If there's no selected text, but a popup is open, we might want to let the popup handle its own closure.
+        // For now, we'll clear it if the selection is empty.
+        const activeElement = document.activeElement;
+        const isPopupFocused = activeElement && activeElement.closest('#translate-popup');
+        if (!isPopupFocused) {
+          clearSelection();
         }
       }
-    }
-  }, []);
-
-  const handleMouseUp = useCallback((e: MouseEvent) => {
-    const target = e.target as HTMLElement;
-    
-    if (target.closest('#translate-popup') || target.closest('#translate-button')) {
-      return;
-    }
-    
-    const selection = window.getSelection();
-    const text = selection?.toString().trim();
-    
-    if (text && text.length > 0) {
-      try {
-        const range = selection!.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-        
-        setState({
-          selection: { text, range },
-          popupPosition: {
-            top: rect.bottom + window.scrollY + 10,
-            left: rect.left + window.scrollX
-          },
-          isSelecting: true
-        });
-      } catch (error) {
-        console.error('Selection processing failed:', error);
-        setState({
-          selection: { text: '', range: null },
-          popupPosition: null,
-          isSelecting: false
-        });
-      }
-    } else {
-      setState({
-        selection: { text: '', range: null },
-        popupPosition: null,
-        isSelecting: false
-      });
-    }
-    
-    isDragging.current = false;
-  }, []);
-
+    }, UI_CONFIG.DEBOUNCE_DELAY);
+  }, [clearSelection]);
+  
   useEffect(() => {
-    document.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-    
     return () => {
-      document.removeEventListener('mousedown', handleMouseDown);
-      document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
     };
-  }, [handleMouseDown, handleMouseMove, handleMouseUp]);
+  }, [handleMouseUp]);
 
   return {
-    selection: state.selection,
-    popupPosition: state.popupPosition,
-    isSelecting: state.isSelecting,
-    clearSelection
+    ...state,
+    clearSelection,
   };
 };

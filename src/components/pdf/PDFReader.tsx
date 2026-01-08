@@ -40,7 +40,6 @@ const PDFReader = () => {
     const {
         selection: textSelection,
         popupPosition,
-        isSelecting,
         clearSelection
     } = useTextSelection();
 
@@ -77,7 +76,7 @@ const PDFReader = () => {
     }, [file]);
 
     useEffect(() => {
-        if (isSelecting && textSelection.text && !showTranslation) {
+        if (textSelection.text) {
             translateText(textSelection.text).catch((error) => {
                 if (error.message?.includes('Extension context invalidated') || 
                     error.message?.includes('확장 프로그램이 업데이트되었습니다')) {
@@ -87,7 +86,7 @@ const PDFReader = () => {
                 }
             });
         }
-    }, [isSelecting, textSelection.text, showTranslation, translateText, addAlert]);
+    }, [textSelection.text, translateText, addAlert]);
 
     const onDocumentLoadSuccess = (pdf: PDFDocumentProxy) => {
         console.log('PDF loaded successfully, pages:', pdf.numPages);
