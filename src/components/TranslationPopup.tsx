@@ -153,7 +153,7 @@ const TranslationPopup = forwardRef<HTMLDivElement, TranslationPopupProps>(({
                     className={`text-sm font-bold transition-all duration-300 w-full ${
                       isSaved 
                         ? 'text-green-600 border-green-200 hover:bg-green-50' 
-                        : 'bg-green-500 hover:bg-green-600'
+                        : 'bg-green-500 hover:bg-green-600 text-white'
                     }`}
                   >
                     {isSaved ? (
