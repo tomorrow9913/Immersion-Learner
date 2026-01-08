@@ -31,9 +31,10 @@ const WordList = () => {
     return () => chrome.storage.onChanged.removeListener(listener);
   }, []);
 
-  const handleDelete = (id: string) => {
-    const newWords = words.filter(w => w.id !== id);
-    chrome.storage.local.set({ words: newWords });
+  const handleDelete = async (id: string) => {
+    const { words: currentWords = [] }: { words: Word[] } = await chrome.storage.local.get('words');
+    const newWords = currentWords.filter(w => w.id !== id);
+    await chrome.storage.local.set({ words: newWords });
   };
 
   const playAudio = (audioUrl?: string) => {

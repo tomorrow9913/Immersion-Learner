@@ -9,6 +9,30 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
+let isSaving = false;
+const saveQueue: (() => Promise<void>)[] = [];
+
+async function processSaveQueue() {
+  if (isSaving || saveQueue.length === 0) {
+    return;
+  }
+  isSaving = true;
+  const saveOperation = saveQueue.shift();
+  try {
+    await saveOperation?.();
+  } catch (error) {
+    console.error('Save operation failed:', error);
+  } finally {
+    isSaving = false;
+    processSaveQueue();
+  }
+}
+
+function enqueueSave(original: string, translated: string) {
+  saveQueue.push(() => saveToWordbook(original, translated));
+  processSaveQueue();
+}
+
 chrome.contextMenus.onClicked.addListener(async (info) => {
   if (info.menuItemId === 'add-to-wordbook') {
     const selectedText = info.selectionText?.trim();
@@ -17,7 +41,7 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
     try {
       const translatedText = await translateText(selectedText);
       if (translatedText.trim().length > 0) {
-        await saveToWordbook(selectedText, translatedText);
+        enqueueSave(selectedText, translatedText);
       }
     } catch (err) {
       console.error('단어장 추가 중 번역 오류:', err);
@@ -46,7 +70,13 @@ async function saveToWordbook(original: string, translated: string) {
     stage: 0
   };
 
-  await chrome.storage.local.set({ words: [...words, newWord] });
+  const { words: currentWords = [] }: { words: any[] } = await chrome.storage.local.get('words');
+  if (currentWords.some((w: any) => w.original === original)) {
+    console.log('단어가 이미 존재합니다 (재확인):', original);
+    return;
+  }
+
+  await chrome.storage.local.set({ words: [...currentWords, newWord] });
   console.log('단어 저장 성공:', original);
 }
 
@@ -60,7 +90,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sendResponse({ success: true, translatedText, dictionaryData });
       } else if (message.type === MESSAGE_TYPES.SAVE_WORD) {
         const { original, translated } = message;
-        await saveToWordbook(original, translated);
+        enqueueSave(original, translated);
         sendResponse({ success: true });
       }
     } catch (error) {
