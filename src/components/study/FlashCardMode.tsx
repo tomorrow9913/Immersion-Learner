@@ -33,10 +33,11 @@ const FlashCardMode = () => {
             index,
             isCenter: position === 'current',
             zIndex: position === 'current' ? 20 : position === 'prev' ? 10 : 5,
-            scale: position === 'current' ? 1 : position === 'prev' ? 0.85 : 0.85,
-            opacity: position === 'current' ? 1 : 0.7,
-            translateX: position === 'current' ? 0 : position === 'prev' ? -50 : 50,
-            rotateY: position === 'current' ? 0 : position === 'prev' ? 15 : -15,
+            scale: position === 'current' ? 1 : 0.9,
+            opacity: position === 'current' ? 1 : 0.8,
+            translateX: position === 'current' ? 0 : position === 'prev' ? -40 : 40,
+            translateY: position === 'current' ? 0 : 15,
+            rotateY: position === 'current' ? 0 : position === 'prev' ? 10 : -10,
         };
     };
 
@@ -126,7 +127,7 @@ const FlashCardMode = () => {
                                 isCurrentCard && isRotating ? 'pointer-events-none' : isCurrentCard ? 'group' : ''
                             }`}
                             style={{
-                                transform: `translateX(${cardData.translateX}%) scale(${cardData.scale}) rotateY(${cardData.rotateY}deg)`,
+                                transform: `translateX(${cardData.translateX}%) translateY(${cardData.translateY}px) scale(${cardData.scale}) rotateY(${cardData.rotateY}deg)`,
                                 zIndex: cardData.zIndex,
                                 opacity: cardData.opacity,
                                 transition: 'all 0.6s ease-in-out',
