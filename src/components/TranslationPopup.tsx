@@ -55,8 +55,9 @@ const TranslationPopup = forwardRef<HTMLDivElement, TranslationPopupProps>(({
         zIndex: 9999,
       }}
       className="font-sans text-sm"
-      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-      onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+      onMouseUp={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.preventDefault()}
     >
       <Card className="w-80 shadow-xl border-gray-200 bg-white relative">
         {onClose && (

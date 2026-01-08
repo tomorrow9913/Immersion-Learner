@@ -60,7 +60,7 @@ const calculateSentenceRects = (textItems: TextItem[], startIndex: number, endIn
     
     rects.push({
       x: x,
-      y: y - height,
+      y: y,
       width,
       height
     });

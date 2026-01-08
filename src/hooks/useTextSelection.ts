@@ -6,6 +6,35 @@ interface TextSelectionState {
   popupPosition: { top: number; left: number } | null;
 }
 
+const calculatePopupPosition = (selectionRect: DOMRect) => {
+  const { 
+    TRANSLATION_POPUP: { OFFSET: GAP, HEIGHT: POPUP_HEIGHT, WIDTH: POPUP_WIDTH }, 
+  } = UI_CONFIG;
+
+  const viewportHeight = window.innerHeight;
+  const scrollY = window.scrollY;
+
+  const absoluteTop = selectionRect.top + scrollY;
+  const absoluteBottom = selectionRect.bottom + scrollY;
+
+  const spaceBelow = viewportHeight - selectionRect.bottom;
+  
+  let topPosition;
+  if (spaceBelow < POPUP_HEIGHT) {
+    topPosition = absoluteTop - POPUP_HEIGHT - GAP;
+  } else {
+    topPosition = absoluteBottom + GAP;
+  }
+
+  const leftPosition = Math.min(
+    Math.max(selectionRect.left, 10),
+    document.body.clientWidth - POPUP_WIDTH - 10
+  );
+
+  return { top: topPosition, left: leftPosition };
+};
+
+
 export const useTextSelection = () => {
   const [state, setState] = useState<TextSelectionState>({
     selection: { text: '', range: null },
@@ -22,7 +51,7 @@ export const useTextSelection = () => {
       popupPosition: null,
     });
   }, []);
-
+  
   const handleMouseUp = useCallback(() => {
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current);
@@ -44,36 +73,35 @@ export const useTextSelection = () => {
           
           setState({
             selection: { text: selectedText, range },
-            popupPosition: {
-              top: rect.bottom + window.scrollY + UI_CONFIG.TRANSLATION_POPUP.OFFSET,
-              left: rect.left + window.scrollX,
-            },
+            popupPosition: calculatePopupPosition(rect),
           });
         } catch (error) {
-          console.error('오류 처리 중 선택 실패:', error);
+          console.error('Failed to process selection:', error);
           clearSelection();
         }
-      } else {
-        // If there's no selected text, but a popup is open, we might want to let the popup handle its own closure.
-        // For now, we'll clear it if the selection is empty.
-        const activeElement = document.activeElement;
-        const isPopupFocused = activeElement && activeElement.closest('#translate-popup');
-        if (!isPopupFocused) {
-          clearSelection();
-        }
-      }
+      } 
     }, UI_CONFIG.DEBOUNCE_DELAY);
   }, [clearSelection]);
   
   useEffect(() => {
+    const handleMouseDown = (event: MouseEvent) => {
+      const popupElement = document.getElementById('translate-popup');
+      if (popupElement && !popupElement.contains(event.target as Node)) {
+        clearSelection();
+      }
+    };
+
     document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousedown', handleMouseDown);
+    
     return () => {
       document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mousedown', handleMouseDown);
       if (debounceTimer.current) {
         clearTimeout(debounceTimer.current);
       }
     };
-  }, [handleMouseUp]);
+  }, [handleMouseUp, clearSelection]);
 
   return {
     ...state,
