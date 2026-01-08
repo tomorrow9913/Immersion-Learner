@@ -36,7 +36,7 @@ const FlashCardMode = () => {
             word: words[index],
             index,
             isCenter: position === 'current',
-            transform: `rotateY(${cardRotation}deg) translateZ(250px)`,
+            transform: `rotateY(${cardRotation}deg) translateZ(150px) scale(${position === 'current' ? 1 : 0.8})`,
             zIndex: position === 'current' ? 20 : 10,
         };
     };
@@ -120,7 +120,7 @@ const FlashCardMode = () => {
                     return (
                         <div
                             key={position}
-                            className={`absolute w-full h-full cursor-pointer`}
+                            className={`absolute w-full max-w-md h-full cursor-pointer`}
                             style={{
                                 transform: cardData.transform,
                                 zIndex: cardData.zIndex,
