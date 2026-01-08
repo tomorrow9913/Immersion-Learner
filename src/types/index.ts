@@ -71,3 +71,10 @@ export interface DictionaryEntry {
 }
 
 export interface DictionaryAPIResponse extends Array<DictionaryEntry> {}
+
+export interface WordDetails {
+  phonetic?: string;
+  audioUrl?: string;
+  meanings: string[];
+  examples?: string[];
+}

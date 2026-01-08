@@ -1,13 +1,10 @@
 import { useState, useCallback, useRef } from 'react';
 import { UI_CONFIG, MESSAGE_TYPES } from '@/config/constants';
+import type { WordDetails } from '@/types';
 
 interface TranslationData {
   translation: string;
-  wordDetails: {
-    phonetic?: string;
-    audioUrl?: string;
-    meanings: string[];
-  } | null;
+  wordDetails: WordDetails | null;
 }
 
 interface TranslationError {

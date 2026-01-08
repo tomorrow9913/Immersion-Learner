@@ -2,12 +2,7 @@ import { useEffect, useState, forwardRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Volume2, Loader2, Check, BookOpen, RefreshCw, X } from 'lucide-react';
-
-interface WordDetails {
-  phonetic?: string;
-  audioUrl?: string;
-  meanings: string[];
-}
+import type { WordDetails } from '@/types';
 
 interface TranslationPopupProps {
   selectedText: string;
