@@ -62,23 +62,13 @@ export async function getDictionaryData(word: string) {
       const phonetic = firstEntry.phonetic || firstEntry.phonetics?.find((p: any) => p.text)?.text;
       const audioUrl = firstEntry.phonetics?.find((p: any) => p.audio)?.audio;
       
-      const meanings: string[] = [];
-      firstEntry.meanings?.forEach((meaning: any) => {
-        meaning.definitions?.forEach((def: any) => {
-          if (def.definition) {
-            meanings.push(def.definition);
-          }
-        });
-      });
+      const meanings = firstEntry.meanings?.flatMap((meaning: any) => 
+        meaning.definitions?.map((def: any) => def.definition).filter(Boolean) || []
+      ) || [];
       
-      const examples: string[] = [];
-      firstEntry.meanings?.forEach((meaning: any) => {
-        meaning.definitions?.forEach((def: any) => {
-          if (def.example) {
-            examples.push(def.example);
-          }
-        });
-      });
+      const examples = firstEntry.meanings?.flatMap((meaning: any) => 
+        meaning.definitions?.map((def: any) => def.example).filter(Boolean) || []
+      ) || [];
       
       return {
         phonetic,

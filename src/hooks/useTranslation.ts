@@ -42,16 +42,18 @@ export const useTranslation = () => {
     if (!trimmedText) return;
     
     if (translationCache.current.has(trimmedText)) {
-      const cachedData = translationCache.current.get(trimmedText)!;
-      updateState({
-        ...cachedData,
-        selectedText: trimmedText,
-        isTranslating: false,
-        isSaved: false,
-        showTranslation: true,
-        error: null,
-      });
-      return;
+      const cachedData = translationCache.current.get(trimmedText);
+      if (cachedData) {
+        updateState({
+          ...cachedData,
+          selectedText: trimmedText,
+          isTranslating: false,
+          isSaved: false,
+          showTranslation: true,
+          error: null,
+        });
+        return;
+      }
     }
 
     updateState({
