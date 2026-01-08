@@ -10,11 +10,17 @@ interface TranslationData {
   } | null;
 }
 
+interface TranslationError {
+  message: string;
+  type: 'context_invalidated' | 'default';
+}
+
 interface TranslationState extends TranslationData {
   selectedText: string;
   isTranslating: boolean;
   isSaved: boolean;
   showTranslation: boolean;
+  error: TranslationError | null;
 }
 
 export const useTranslation = () => {
@@ -24,7 +30,8 @@ export const useTranslation = () => {
     isTranslating: false,
     isSaved: false,
     wordDetails: null,
-    showTranslation: false
+    showTranslation: false,
+    error: null,
   });
 
   const updateState = useCallback((updates: Partial<TranslationState>) => {
@@ -45,6 +52,7 @@ export const useTranslation = () => {
         isTranslating: false,
         isSaved: false,
         showTranslation: true,
+        error: null,
       });
       return;
     }
@@ -56,13 +64,22 @@ export const useTranslation = () => {
       isSaved: false,
       wordDetails: null,
       showTranslation: true,
+      error: null,
     });
 
     try {
+      if (!chrome.runtime?.id) {
+        throw new Error('확장 프로그램이 업데이트되었습니다. 페이지를 새로고침 해주세요.');
+      }
+
       const response = await chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.GET_TRANSLATION_AND_DETAILS,
         text: trimmedText
       });
+
+      if (chrome.runtime.lastError) {
+        throw new Error(chrome.runtime.lastError.message || '번역 서비스를 사용할 수 없습니다.');
+      }
 
       if (response?.success) {
         const { translatedText, dictionaryData } = response;
@@ -88,9 +105,13 @@ export const useTranslation = () => {
       }
     } catch (error) {
       console.error('번역 중 오류 발생:', error);
+      const errorMessage = error instanceof Error ? error.message : '번역 서비스를 사용할 수 없습니다.';
+      const errorType = errorMessage.includes('확장 프로그램') ? 'context_invalidated' : 'default';
+      
       updateState({
-        translation: error instanceof Error ? error.message : '번역 서비스를 사용할 수 없습니다.',
+        translation: errorMessage,
         isTranslating: false,
+        error: { message: errorMessage, type: errorType },
       });
     }
   }, [updateState]);
@@ -124,7 +145,8 @@ export const useTranslation = () => {
       isTranslating: false,
       isSaved: false,
       wordDetails: null,
-      showTranslation: false
+      showTranslation: false,
+      error: null,
     });
   }, [updateState]);
 
