@@ -17,7 +17,7 @@ function mount() {
     rootDiv.style.top = '0';
     rootDiv.style.left = '0';
     rootDiv.style.zIndex = '2147483647';
-    rootDiv.style.pointerEvents = 'none'; // Let events pass through wrapper
+    rootDiv.style.pointerEvents = 'auto'; // Allow events on wrapper for global detection
     
     document.body.appendChild(rootDiv);
 
@@ -31,7 +31,7 @@ function mount() {
     // Container for React app inside shadow DOM
     // We need pointer-events: auto on this container so button is clickable
     const appContainer = document.createElement('div');
-    appContainer.style.pointerEvents = 'auto';
+    appContainer.style.pointerEvents = 'none';
     shadowRoot.appendChild(appContainer);
 
     ReactDOM.createRoot(appContainer).render(
@@ -41,8 +41,7 @@ function mount() {
     );
 }
 
-// Mount immediately
-mount();
+setTimeout(mount, 100);
 
 // Also observe body for changes in case it's a SPA or body is replaced? 
 // Usually content script runs at 'document_idle' by default, so body exists.

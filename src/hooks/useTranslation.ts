@@ -50,7 +50,6 @@ export const useTranslation = () => {
       translation: '',
       isSaved: false,
       wordDetails: null,
-      showTranslation: false
     });
     
     const controller = new AbortController();

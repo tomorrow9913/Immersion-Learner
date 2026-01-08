@@ -2,11 +2,9 @@ import { useState } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { TAB_CONFIG } from '@/config/tabConfig';
 import { TABS, type TabType } from '@/config/constants';
-import WordList from '@/components/WordList';
-import FlashCardMode from '@/components/FlashCardMode';
-import QuizMode from '@/components/QuizMode';
-import PDFReader from '@/components/PDFReader';
-import ErrorFallback from '@/components/ErrorFallback';
+import { WordList, FlashCardMode, QuizMode } from '@/components/study';
+import { PDFReader } from '@/components/pdf';
+import { ErrorFallback } from '@/components/common';
 
 const App = () => {
   const [activeTab, setActiveTab] = useState<TabType>(TABS.FLASHCARD);

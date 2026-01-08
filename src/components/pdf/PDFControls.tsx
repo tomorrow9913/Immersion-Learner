@@ -75,6 +75,7 @@ const PDFControls: React.FC<PDFControlsProps> = ({
             </Button>
             <input
               id="controls-file-input"
+              data-testid="controls-file-input"
               type="file"
               accept=".pdf"
               onChange={handleFileChange}

@@ -42,10 +42,13 @@ describe('PDFControls', () => {
     expect(nextButton).toBeDisabled();
   });
 
-  it('calls onFileSelect when "다른 PDF 열기" button is clicked', () => {
+  it('calls onFileSelect when a file is selected', () => {
     render(<PDFControls {...defaultProps} />);
-    const openButton = screen.getByText('다른 PDF 열기');
-    fireEvent.click(openButton);
-    expect(defaultProps.onFileSelect).toHaveBeenCalled();
+    const file = new File([''], 'test.pdf', { type: 'application/pdf' });
+    const input = screen.getByTestId('controls-file-input');
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect(defaultProps.onFileSelect).toHaveBeenCalledWith(file);
   });
 });

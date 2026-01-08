@@ -236,9 +236,6 @@ const effectiveQuestionCount = questionCount === -1 ? wordList.length : question
                                     chrome.storage.local.get(['words'], (result) => {
                                         const allWords = (result.words as Word[]) || [];
                                         setWords(allWords.sort(() => Math.random() - 0.5));
-                                        setScore(0);
-                                        setTotal(0);
-                                        setIsQuizComplete(false);
                                         setIsQuizSetup(true);
                                     });
                                 }}

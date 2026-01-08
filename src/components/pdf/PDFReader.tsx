@@ -10,11 +10,9 @@ import { usePDFStorage } from '@/hooks/usePDFStorage';
 import { extractOutlineDirectly } from '@/utils/outlineUtils';
 
 import type { OutlineItem } from '@/types';
-import TranslationPopup from './TranslationPopup';
-import Sidebar from './Sidebar';
-import FileDropArea from './FileDropArea';
-import PDFViewer from './PDFViewer';
-import PDFControls from './PDFControls';
+import { Sidebar, PDFViewer, PDFControls } from './';
+import { FileDropArea } from '@/components/common';
+import { TranslationPopup } from '../';
 
 const PDFReader = () => {
     pdfjs.GlobalWorkerOptions.workerSrc = PDF_CONFIG.WORKER_SRC;
@@ -25,6 +23,7 @@ const PDFReader = () => {
     const [outline, setOutline] = useState<OutlineItem[]>([]);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isDragOver, setIsDragOver] = useState(false);
+    const [position, setPosition] = useState({ top: 0, left: 0 });
 
     const {
         selectedText,
@@ -199,6 +198,10 @@ const PDFReader = () => {
                 resetTranslation();
                 return;
             }
+
+            const range = selection.getRangeAt(0);
+            const rect = range.getBoundingClientRect();
+            setPosition({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX });
             
             const text = selection.toString().trim();
             if (text === selectedText && showTranslation) {
@@ -264,6 +267,7 @@ const PDFReader = () => {
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden">
             <TranslationPopup
+                position={position}
                 selectedText={selectedText}
                 translation={translation}
                 isTranslating={isTranslating}
