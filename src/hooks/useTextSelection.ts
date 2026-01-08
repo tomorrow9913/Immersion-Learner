@@ -79,26 +79,32 @@ export const useTextSelection = () => {
         const range = selection!.getRangeAt(0);
         const rect = range.getBoundingClientRect();
         
-        const popupPosition = {
-          top: rect.bottom + window.scrollY + 10,
-          left: rect.left + window.scrollX
-        };
-        
         setState({
           selection: { text, range },
-          popupPosition,
+          popupPosition: {
+            top: rect.bottom + window.scrollY + 10,
+            left: rect.left + window.scrollX
+          },
           isSelecting: true
         });
       } catch (error) {
         console.error('Selection processing failed:', error);
-        setState(prev => ({ ...prev, popupPosition: null, isSelecting: false }));
+        setState({
+          selection: { text: '', range: null },
+          popupPosition: null,
+          isSelecting: false
+        });
       }
     } else {
-      clearSelection();
+      setState({
+        selection: { text: '', range: null },
+        popupPosition: null,
+        isSelecting: false
+      });
     }
     
     isDragging.current = false;
-  }, [clearSelection]);
+  }, []);
 
   useEffect(() => {
     document.addEventListener('mousedown', handleMouseDown);
@@ -113,7 +119,9 @@ export const useTextSelection = () => {
   }, [handleMouseDown, handleMouseMove, handleMouseUp]);
 
   return {
-    ...state,
+    selection: state.selection,
+    popupPosition: state.popupPosition,
+    isSelecting: state.isSelecting,
     clearSelection
   };
 };
