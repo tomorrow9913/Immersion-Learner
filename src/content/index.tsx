@@ -1,3 +1,6 @@
+import { overrideConsole } from '@/utils/console-overrider';
+overrideConsole();
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import ContentApp from './ContentApp';

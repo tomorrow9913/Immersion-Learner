@@ -1,3 +1,6 @@
+import { overrideConsole } from './utils/console-overrider';
+overrideConsole();
+
 import "./config/pdfWorker";
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'

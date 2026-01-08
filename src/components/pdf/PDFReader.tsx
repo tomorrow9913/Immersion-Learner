@@ -16,6 +16,8 @@ import { Sidebar, PDFViewer, PDFControls } from './';
 import { FileDropArea, MultiStackAlert } from '@/components/common';
 import { TranslationPopup } from '../';
 
+import alertService from '@/services/AlertService';
+
 const PDFReader = () => {
     pdfjs.GlobalWorkerOptions.workerSrc = PDF_CONFIG.WORKER_SRC;
     
@@ -48,6 +50,10 @@ const PDFReader = () => {
         addAlert,
         clearAlert
     } = useMultiAlert();
+
+    useEffect(() => {
+        alertService.register(addAlert);
+    }, [addAlert]);
 
     const {
         recentFiles,

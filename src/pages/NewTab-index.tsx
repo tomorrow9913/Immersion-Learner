@@ -1,3 +1,6 @@
+import { overrideConsole } from '../utils/console-overrider';
+overrideConsole();
+
 import "../config/pdfWorker";
 import React from 'react'
 import ReactDOM from 'react-dom/client'

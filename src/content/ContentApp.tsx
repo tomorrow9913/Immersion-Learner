@@ -10,6 +10,8 @@ interface TranslationData {
   wordDetails: any;
 }
 
+import alertService from '@/services/AlertService';
+
 const ContentApp = () => {
   const [translation, setTranslation] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -24,6 +26,10 @@ const ContentApp = () => {
 
   const { alerts, addAlert, clearAlert } = useMultiAlert();
   const { selection: { text: selectedText }, popupPosition, clearSelection } = useTextSelection();
+
+  useEffect(() => {
+    alertService.register(addAlert);
+  }, [addAlert]);
 
   const translateText = useCallback(async (text: string) => {
     const trimmedText = text.trim();
