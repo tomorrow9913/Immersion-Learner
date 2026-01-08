@@ -40,9 +40,9 @@ describe('useTranslation', () => {
       dictionaryData: null,
     };
 
-    (window as any).chrome = {
+    global.chrome = {
       runtime: {
-        sendMessage: vi.fn((_, callback) => {
+        sendMessage: vi.fn((message, callback) => {
           if (callback) {
             callback(mockResponse);
           }
