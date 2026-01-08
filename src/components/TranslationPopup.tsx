@@ -1,7 +1,7 @@
 import { useEffect, useState, forwardRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Volume2, Loader2, Check, BookOpen, RefreshCw } from 'lucide-react';
+import { Volume2, Loader2, Check, BookOpen, RefreshCw, X } from 'lucide-react';
 
 interface WordDetails {
   phonetic?: string;
@@ -19,6 +19,7 @@ interface TranslationPopupProps {
   onAddToWordbook: () => void;
   onReloadPage?: () => void;
   position: { top: number, left: number };
+  onClose?: () => void;
 }
 
 const TranslationPopup = forwardRef<HTMLDivElement, TranslationPopupProps>(({
@@ -29,8 +30,9 @@ const TranslationPopup = forwardRef<HTMLDivElement, TranslationPopupProps>(({
   wordDetails,
   showTranslation,
   onAddToWordbook,
-  onReloadPage, // Destructure the new prop
-  position
+  onReloadPage,
+  position,
+  onClose,
 }, ref) => {
   const [showCheckmark, setShowCheckmark] = useState(false);
 
@@ -66,7 +68,20 @@ const TranslationPopup = forwardRef<HTMLDivElement, TranslationPopupProps>(({
         e.stopPropagation();
       }}
     >
-      <Card className="w-80 shadow-xl border-gray-200 bg-white">
+      <Card className="w-80 shadow-xl border-gray-200 bg-white relative">
+        {onClose && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className="absolute top-1 right-1 p-1 h-6 w-6"
+          >
+            <X className="h-4 w-4 text-gray-500" />
+          </Button>
+        )}
         <CardContent className="p-4 flex flex-col gap-3">
           {isContextInvalidated ? (
             <div className="text-red-500 text-center">
@@ -76,16 +91,9 @@ const TranslationPopup = forwardRef<HTMLDivElement, TranslationPopupProps>(({
                 페이지 새로고침
               </Button>
             </div>
-          ) : onReloadPage ? (
-            <div className="flex justify-end mt-2">
-              <Button onClick={onReloadPage} className="text-blue-600 hover:text-blue-800 text-sm">
-                <RefreshCw className="h-3 w-3 mr-1" />
-                페이지 새로고침
-              </Button>
-            </div>
           ) : (
             <>
-              <div className="space-y-2">
+              <div className="space-y-2 pr-6">
                 <div className="text-gray-900 break-words font-bold text-lg">{selectedText}</div>
                 
                 {wordDetails?.phonetic && (
@@ -161,7 +169,6 @@ const TranslationPopup = forwardRef<HTMLDivElement, TranslationPopupProps>(({
                     )}
                   </Button>
                   
-                  {/* Checkmark Animation */}
                   {showCheckmark && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                       <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">

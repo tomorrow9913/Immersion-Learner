@@ -1,16 +1,19 @@
 import { useState, useCallback, useRef } from 'react';
 import { UI_CONFIG, MESSAGE_TYPES } from '@/config/constants';
 
-interface TranslationState {
-  selectedText: string;
+interface TranslationData {
   translation: string;
-  isTranslating: boolean;
-  isSaved: boolean;
   wordDetails: {
     phonetic?: string;
     audioUrl?: string;
     meanings: string[];
   } | null;
+}
+
+interface TranslationState extends TranslationData {
+  selectedText: string;
+  isTranslating: boolean;
+  isSaved: boolean;
   showTranslation: boolean;
 }
 
@@ -28,36 +31,47 @@ export const useTranslation = () => {
     setState(prev => ({ ...prev, ...updates }));
   }, []);
 
-  const translationCache = useRef<Map<string, string>>(new Map());
+  const translationCache = useRef<Map<string, TranslationData>>(new Map());
 
   const translateText = useCallback(async (text: string): Promise<void> => {
-    if (!text.trim()) return;
+    const trimmedText = text.trim();
+    if (!trimmedText) return;
     
-    const cached = translationCache.current.get(text);
-    if (cached) {
+    if (translationCache.current.has(trimmedText)) {
+      const cachedData = translationCache.current.get(trimmedText)!;
       updateState({
-        translation: cached,
+        ...cachedData,
+        selectedText: trimmedText,
+        isTranslating: false,
+        isSaved: false,
         showTranslation: true,
-        isTranslating: false
       });
       return;
     }
 
     updateState({
+      selectedText: trimmedText,
       isTranslating: true,
       translation: '',
       isSaved: false,
       wordDetails: null,
+      showTranslation: true,
     });
 
     try {
       const response = await chrome.runtime.sendMessage({
-        type: MESSAGE_TYPES.TRANSLATE_REQUEST,
-        text: text
+        type: MESSAGE_TYPES.GET_TRANSLATION_AND_DETAILS,
+        text: trimmedText
       });
 
-      if (response?.success && response.translatedText) {
-        translationCache.current.set(text, response.translatedText);
+      if (response?.success) {
+        const { translatedText, dictionaryData } = response;
+        const newTranslationData: TranslationData = {
+          translation: translatedText,
+          wordDetails: dictionaryData,
+        };
+        
+        translationCache.current.set(trimmedText, newTranslationData);
         if (translationCache.current.size > 100) {
           const firstKey = translationCache.current.keys().next().value;
           if (firstKey) {
@@ -66,52 +80,38 @@ export const useTranslation = () => {
         }
 
         updateState({
-          translation: response.translatedText,
-          showTranslation: true
+          ...newTranslationData,
+          isTranslating: false,
         });
-
-        const dictResponse = await chrome.runtime.sendMessage({
-          type: MESSAGE_TYPES.GET_WORD_DETAILS,
-          text: text
-        });
-
-        if (dictResponse?.success && dictResponse.data) {
-          updateState({
-            wordDetails: dictResponse.data
-          });
-        }
       } else {
-        updateState({
-          translation: response?.error || '번역에 실패했습니다.',
-          showTranslation: true
-        });
+        throw new Error(response?.error || '번역에 실패했습니다.');
       }
     } catch (error) {
-      console.error('Translation error:', error);
+      console.error('번역 중 오류 발생:', error);
       updateState({
-        translation: '번역 서비스를 사용할 수 없습니다.',
-        showTranslation: true
+        translation: error instanceof Error ? error.message : '번역 서비스를 사용할 수 없습니다.',
+        isTranslating: false,
       });
-    } finally {
-      updateState({ isTranslating: false });
     }
   }, [updateState]);
 
   const addToWordbook = useCallback((text: string, translatedText: string) => {
-    if (typeof chrome !== 'undefined' && chrome.runtime) {
+    if (chrome.runtime?.id) {
       chrome.runtime.sendMessage({
         type: MESSAGE_TYPES.SAVE_WORD,
         original: text,
         translated: translatedText
       }, (res) => {
         if (res?.success) {
+          updateState({ isSaved: true });
           setTimeout(() => {
             window.getSelection()?.removeAllRanges();
+            resetTranslation();
           }, UI_CONFIG.WORD_SAVE_SUCCESS_DURATION);
         }
       });
     }
-  }, []);
+  }, [updateState]);
 
   const setSelectedText = useCallback((text: string) => {
     updateState({ selectedText: text });
@@ -129,13 +129,7 @@ export const useTranslation = () => {
   }, [updateState]);
 
   return {
-    selectedText: state.selectedText,
-    translation: state.translation,
-    isTranslating: state.isTranslating,
-    isSaved: state.isSaved,
-    wordDetails: state.wordDetails,
-    showTranslation: state.showTranslation,
-    
+    ...state,
     translateText,
     addToWordbook,
     setSelectedText,

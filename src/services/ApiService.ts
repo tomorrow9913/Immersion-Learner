@@ -2,7 +2,7 @@ import { fetchWithRetry } from '@/utils/retry';
 
 export async function translateText(text: string, targetLang = 'ko') {
   if (!text || text.trim().length === 0) {
-    throw new Error('Empty text provided');
+    throw new Error('번역할 텍스트가 비어있습니다.');
   }
 
   try {
@@ -15,29 +15,32 @@ export async function translateText(text: string, targetLang = 'ko') {
       }
     );
 
-    const data = await response.json();
+    const rawData = await response.text();
+    const data = JSON.parse(rawData);
     
     if (data && data[0] && Array.isArray(data[0])) {
       const translatedText = data[0].map((item: any) => item[0]).join('');
       if (translatedText.trim().length === 0) {
-        throw new Error('Empty translation result');
+        throw new Error('번역 결과가 비어있습니다.');
       }
       return translatedText;
     }
     
-    throw new Error('Invalid response format');
+    throw new Error('잘못된 응답 형식입니다.');
   } catch (error) {
-    if (error instanceof Error) {
-      if (error.message.includes('Retriable error')) {
-        throw new Error('일시적인 번역 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
-      }
-      throw error;
+    console.error('번역 API 처리 중 오류 발생:', error);
+    if (error instanceof Error && error.message.includes('Retriable error')) {
+      throw new Error('일시적인 번역 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
     }
-    throw new Error('Translation failed');
+    throw new Error('번역에 실패했습니다. 네트워크 연결을 확인하거나 나중에 다시 시도해주세요.');
   }
 }
 
 export async function getDictionaryData(word: string) {
+  if (!word || word.trim().length === 0) {
+    return null;
+  }
+  
   try {
     const response = await fetchWithRetry(
       `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`
@@ -47,7 +50,12 @@ export async function getDictionaryData(word: string) {
       return null;
     }
     
-    const data = await response.json();
+    const rawData = await response.text();
+    if (!rawData) {
+      return null;
+    }
+    
+    const data = JSON.parse(rawData);
     
     if (Array.isArray(data) && data.length > 0) {
       const firstEntry = data[0];
@@ -80,7 +88,7 @@ export async function getDictionaryData(word: string) {
       };
     }
   } catch (error) {
-    console.error('Dictionary API error:', error);
+    console.error('사전 API 처리 중 오류 발생:', error);
   }
   return null;
 }
