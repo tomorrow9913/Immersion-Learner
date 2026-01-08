@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Immersion Learner",
+  "version": "1.0.0",
+  "action": { "default_popup": "index.html" },
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/index.tsx"]
+    }
+  ],
+  "chrome_url_overrides": {
+    "newtab": "newtab.html"
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "tabs",
+    "contextMenus",
+    "declarativeNetRequest"
+  ],
+  "web_accessible_resources": [ { "resources": ["pdf.worker.min.mjs"], "matches": ["<all_urls>"] } ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "ruleset_1",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  }
+}
