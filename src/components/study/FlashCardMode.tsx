@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import type { Word } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Volume2, ArrowRight, RotateCcw } from 'lucide-react';
@@ -7,28 +7,45 @@ const FlashCardMode = () => {
     const [words, setWords] = useState<Word[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [flipped, setFlipped] = useState(false);
+    const [isRotating, setIsRotating] = useState(false); // Re-introduce isRotating
     
-    
-    
-    const [rotation, setRotation] = useState(0);
-
     const getCardData = (position: 'prev' | 'current' | 'next') => {
         if (words.length === 0) return null;
         
         let index;
-        let cardRotation = 0;
+        let translateX_val;
+        let scale_val;
+        let opacity_val;
+        let zIndex_val;
+        let rotateY_val;
+        let rotateZ_val = 0; // New: for extra rotation
+
         switch (position) {
             case 'prev':
                 index = currentIndex === 0 ? words.length - 1 : currentIndex - 1;
-                cardRotation = -60;
+                translateX_val = -50;
+                scale_val = 0.8;
+                opacity_val = 0.6;
+                zIndex_val = 10;
+                rotateY_val = 20; // Increased rotation
+                rotateZ_val = 5; // Slight tilt
                 break;
             case 'current':
                 index = currentIndex;
-                cardRotation = 0;
+                translateX_val = 0;
+                scale_val = 1;
+                opacity_val = 1;
+                zIndex_val = 20;
+                rotateY_val = 0;
                 break;
             case 'next':
                 index = (currentIndex + 1) % words.length;
-                cardRotation = 60;
+                translateX_val = 50;
+                scale_val = 0.8;
+                opacity_val = 0.6;
+                zIndex_val = 5;
+                rotateY_val = -20; // Increased rotation
+                rotateZ_val = -5; // Slight tilt
                 break;
         }
         
@@ -36,17 +53,22 @@ const FlashCardMode = () => {
             word: words[index],
             index,
             isCenter: position === 'current',
-            transform: `rotateY(${cardRotation}deg) translateZ(150px) scale(${position === 'current' ? 1 : 0.8})`,
-            zIndex: position === 'current' ? 20 : 10,
+            zIndex: zIndex_val,
+            scale: scale_val,
+            opacity: opacity_val,
+            translateX: translateX_val,
+            translateY: 0, 
+            rotateY: rotateY_val,
+            rotateZ: rotateZ_val, // Return rotateZ
         };
     };
 
-    const playAudio = (audioUrl?: string) => {
+    const playAudio = useCallback((audioUrl?: string) => {
         if (audioUrl) {
             const audio = new Audio(audioUrl);
             audio.play().catch(console.error);
         }
-    };
+    }, []);
 
     useEffect(() => {
         chrome.storage.local.get(['words'], (result) => {
@@ -55,33 +77,52 @@ const FlashCardMode = () => {
         });
     }, []);
 
-    const handleNext = () => {
+    const handleNext = useCallback(() => {
         setFlipped(false);
-        setRotation((prev) => prev - 60);
+        setIsRotating(true); // Set to true at start
         setTimeout(() => {
             setCurrentIndex((prevIndex) => (prevIndex + 1) % words.length);
-        }, 300);
-    };
+            setIsRotating(false); // Set to false after animation
+        }, 600); // Animation duration
+    }, [words.length]);
 
-    const handlePrev = () => {
+    const handlePrev = useCallback(() => {
         setFlipped(false);
-        setRotation((prev) => prev + 60);
+        setIsRotating(true); // Set to true at start
         setTimeout(() => {
             setCurrentIndex((prevIndex) => (prevIndex === 0 ? words.length - 1 : prevIndex - 1));
-        }, 300);
-    };
+            setIsRotating(false); // Set to false after animation
+        }, 600); // Animation duration
+    }, [words.length]);
 
-    const handleCardClick = (position: 'prev' | 'current' | 'next') => {
+    const handleCardClick = useCallback((position: 'prev' | 'current' | 'next') => {
         if (position === 'current') {
-            setFlipped(!flipped);
-        } else if (position === 'next') {
-            handleNext();
-        } else {
-            handlePrev();
+            if (!isRotating) { // Only allow flip if not rotating
+                setFlipped(!flipped);
+            }
+        } else if (!isRotating) { // Only allow navigation if not rotating
+            setFlipped(false);
+            setIsRotating(true);
+            setTimeout(() => {
+                if (position === 'prev') {
+                    setCurrentIndex((prevIndex) => (prevIndex === 0 ? words.length - 1 : prevIndex - 1));
+                } else {
+                    setCurrentIndex((prevIndex) => (prevIndex + 1) % words.length);
+                }
+                setIsRotating(false);
+            }, 600);
         }
-    };
+    }, [isRotating, words.length]);
 
-    
+    const handleShuffle = useCallback(() => {
+        setFlipped(false);
+        setIsRotating(true); // Set to true at start
+        setTimeout(() => {
+            setCurrentIndex(Math.floor(Math.random() * words.length));
+            setIsRotating(false); // Set to false after animation
+        }, 600); // Animation duration
+    }, [words.length]);
+
 
     if (words.length === 0) {
         return (
@@ -96,42 +137,33 @@ const FlashCardMode = () => {
         );
     }
 
-    
+    // No currentWord needed here since we are mapping over prev, current, next
+    // The previous currentWord was: const currentWord = words[currentIndex]; 
 
     return (
         <div className="flex flex-col items-center justify-center py-10 px-4 min-h-screen">
-            
-
-            <div 
-                className="relative w-full max-w-md h-80 md:h-96"
-                style={{
-                    perspective: '1000px',
-                    transformStyle: 'preserve-3d',
-                    transition: 'transform 0.6s ease-in-out',
-                    transform: `rotateY(${rotation}deg)`,
-                }}
-            >
+            <div className="relative w-full max-w-6xl h-80 md:h-96 flex items-center justify-center" style={{ perspective: '1000px' }}>
                 {['prev', 'current', 'next'].map((position) => {
                     const cardData = getCardData(position as 'prev' | 'current' | 'next');
-                    if (!cardData) return null;
+                    if (!cardData || !cardData.word) return null; // Ensure word data exists
                     
                     const isCurrentCard = cardData.isCenter;
                     
                     return (
                         <div
-                            key={position}
-                            className={`absolute w-full max-w-md h-full cursor-pointer`}
+                            key={cardData.word.id || position} // Use word.id for key if available, otherwise position
+                            className={`absolute w-full max-w-md h-full cursor-pointer transition-all duration-600 ease-in-out ${
+                                isCurrentCard && isRotating ? 'pointer-events-none' : isCurrentCard ? 'group' : ''
+                            }`}
                             style={{
-                                transform: cardData.transform,
+                                transform: `translateX(${cardData.translateX}%) translateY(${cardData.translateY}px) scale(${cardData.scale}) rotateY(${cardData.rotateY}deg) rotateZ(${cardData.rotateZ}deg)`,
                                 zIndex: cardData.zIndex,
-                                transition: 'transform 0.6s ease-in-out, opacity 0.6s ease-in-out',
+                                opacity: cardData.opacity,
                             }}
                             onClick={() => handleCardClick(position as 'prev' | 'current' | 'next')}
                         >
                             <div 
-                                className={`relative w-full h-full transition-all duration-700 ease-in-out transform-gpu ${
-                                    ''
-                                }`}
+                                className={`relative w-full h-full transition-all duration-700 ease-in-out transform-gpu`}
                                 style={{ 
                                     transformStyle: 'preserve-3d', 
                                     transform: isCurrentCard
@@ -187,19 +219,19 @@ const FlashCardMode = () => {
                                         <div className="text-sm text-blue-100 uppercase tracking-widest mb-3 font-bold">MEMORIZING</div>
                                         <div className="text-lg md:text-xl font-bold mb-4 break-words w-full text-center">{cardData.word.translated}</div>
                                         
-{cardData.word.meanings && cardData.word.meanings.length > 0 && (
-                                        <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3 max-h-24 overflow-y-auto">
-                                            <div className="text-xs text-blue-100 mb-2 font-medium">Additional meanings:</div>
-                                            <div className="space-y-1">
-                                                {cardData.word.meanings.slice(0, 2).map((meaning, index) => (
-                                                    <div key={index} className="text-sm text-white flex items-start gap-2">
-                                                        <span className="text-blue-200 min-w-[20px]">{index + 1}.</span>
-                                                        <span>{meaning}</span>
-                                                    </div>
-                                                ))}
+                                        {cardData.word.meanings && cardData.word.meanings.length > 0 && (
+                                            <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3 max-h-24 overflow-y-auto">
+                                                <div className="text-xs text-blue-100 mb-2 font-medium">Additional meanings:</div>
+                                                <div className="space-y-1">
+                                                    {cardData.word.meanings.slice(0, 2).map((meaning, index) => (
+                                                        <div key={index} className="text-sm text-white flex items-start gap-2">
+                                                            <span className="text-blue-200 min-w-[20px]">{index + 1}.</span>
+                                                            <span>{meaning}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -208,32 +240,31 @@ const FlashCardMode = () => {
                 })}
             </div>
 
-            
-
             {/* Action Buttons */}
             <div className="mt-8 flex gap-4 w-full max-w-lg">
                 <Button 
                     variant="outline"
-                    onClick={(e) => { e.stopPropagation(); handlePrev(); }} 
+                    onClick={handlePrev} 
                     className="flex-1"
+                    disabled={isRotating} // Disable during rotation
                 >
                     <ArrowRight className="h-4 w-4 mr-2 rotate-180" />
                     Prev
                 </Button>
                 <Button 
                     variant="outline"
-                    onClick={(e) => { e.stopPropagation(); handleNext(); }} 
+                    onClick={handleNext} 
                     className="flex-1"
+                    disabled={isRotating} // Disable during rotation
                 >
                     <ArrowRight className="h-4 w-4 mr-2" />
                     Skip
                 </Button>
                 <Button 
                     variant="secondary"
-                    onClick={(e) => { e.stopPropagation(); 
-                        setCurrentIndex(() => Math.floor(Math.random() * words.length));
-                    }}
+                    onClick={handleShuffle}
                     className="flex-1"
+                    disabled={isRotating} // Disable during rotation
                 >
                     <RotateCcw className="h-4 w-4 mr-2" />
                     Shuffle

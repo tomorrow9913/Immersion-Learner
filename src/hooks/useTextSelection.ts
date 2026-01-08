@@ -35,7 +35,7 @@ const calculatePopupPosition = (selectionRect: DOMRect) => {
 };
 
 
-export const useTextSelection = () => {
+export const useTextSelection = (onSelectionCleared?: () => void) => {
   const [state, setState] = useState<TextSelectionState>({
     selection: { text: '', range: null },
     popupPosition: null,
@@ -50,7 +50,8 @@ export const useTextSelection = () => {
       selection: { text: '', range: null },
       popupPosition: null,
     });
-  }, []);
+    onSelectionCleared?.(); // Call the callback when selection is cleared
+  }, [onSelectionCleared]);
   
   const handleMouseUp = useCallback(() => {
     if (debounceTimer.current) {
@@ -79,6 +80,13 @@ export const useTextSelection = () => {
           console.error('Failed to process selection:', error);
           clearSelection();
         }
+      } else {
+        // If selection is empty, clear the popup state
+        setState({
+          selection: { text: '', range: null },
+          popupPosition: null,
+        });
+        onSelectionCleared?.(); // Call the callback when selection is implicitly cleared (e.g., clicking away)
       } 
     }, UI_CONFIG.DEBOUNCE_DELAY);
   }, [clearSelection]);
@@ -93,6 +101,7 @@ export const useTextSelection = () => {
             // 2. [수정 포인트] 선택 영역을 '즉시' 지우지 말고, 새로운 선택이 시작되는지 확인하거나
             // 기존 팝업만 닫도록 처리 (Selection API 호출 최소화)
       setState(prev => ({ ...prev, popupPosition: null })); // 팝업만 일단 닫음
+      onSelectionCleared?.(); // Call the callback to reset translation state
             // 주의: removeAllRanges()를 여기서 호출하면 더블 클릭 시 선택이 풀릴 수 있음
             // 브라우저는 클릭 시 자동으로 선택을 해제하므로 굳이 강제로 호출할 필요가 없을 수 있음
     };

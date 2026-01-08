@@ -23,6 +23,7 @@ const PDFReader = () => {
     
     const [file, setFile] = useState<File | string | Blob | null>(null);
     const [numPages, setNumPages] = useState<number>(0);
+    const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
     const [pageNumber, setPageNumber] = useState(1);
     const [outline, setOutline] = useState<OutlineItem[]>([]);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -43,7 +44,7 @@ const PDFReader = () => {
         selection: textSelection,
         popupPosition,
         clearSelection
-    } = useTextSelection();
+    } = useTextSelection(resetTranslation);
 
     const {
         alerts,
@@ -97,6 +98,7 @@ const PDFReader = () => {
     const onDocumentLoadSuccess = (pdf: PDFDocumentProxy) => {
         console.log('PDF loaded successfully, pages:', pdf.numPages);
         setNumPages(pdf.numPages);
+        setPdfDocument(pdf); // Store the PDF document
         extractOutlineDirectly(pdf).then(setOutline);
     };
 
@@ -105,22 +107,37 @@ const PDFReader = () => {
         addAlert(`PDF 로딩 실패: ${error.message}\n파일이 손상되지 않았는지 확인해주세요.`, 'destructive');
     };
 
-    const handleOutlineClick = (dest: any, _title: string, pageNumber?: number) => {
-        let targetPage: number;
+    const handleOutlineClick = async (dest: any, _title: string, pageNumber?: number) => {
+        let targetPage: number | undefined;
         
         if (pageNumber) {
             targetPage = pageNumber;
         } else if (dest && typeof dest === 'object' && dest.num !== undefined) {
             targetPage = dest.num + 1;
         } else if (typeof dest === 'string') {
-            console.log('Named destination:', dest);
-            return;
-        } else {
-            return;
+            if (pdfDocument) {
+                try {
+                    const namedDest = await pdfDocument.getDestination(dest);
+                    if (namedDest) {
+                        const page = await pdfDocument.getPageIndex(namedDest[0]);
+                        targetPage = page + 1;
+                    } else {
+                        console.warn(`Named destination "${dest}" not found.`);
+                    }
+                } catch (error) {
+                    console.error('Error resolving named destination:', error);
+                }
+            } else {
+                console.warn('PDF document not loaded, cannot resolve named destination.');
+            }
         }
-        
-        setPageNumber(targetPage);
-        updateLastPage(file, targetPage);
+
+        if (targetPage !== undefined) {
+            setPageNumber(targetPage);
+            updateLastPage(file, targetPage);
+        } else {
+            console.warn('Could not determine target page for outline item.');
+        }
     };
 
     const handlePageChange = (newPage: number) => { 
@@ -205,17 +222,19 @@ const PDFReader = () => {
                 onClearAlert={clearAlert}
             />
             
-            <TranslationPopup
-                position={popupPosition || { top: 0, left: 0 }}
-                selectedText={textSelection.text}
-                translation={translation}
-                isTranslating={isTranslating}
-                isSaved={isSaved}
-                wordDetails={wordDetails}
-                showTranslation={showTranslation}
-                onAddToWordbook={handleAddToWordbook}
-                onReloadPage={handlePageReload}
-            />
+            {popupPosition && (
+                <TranslationPopup
+                    position={popupPosition}
+                    selectedText={textSelection.text}
+                    translation={translation}
+                    isTranslating={isTranslating}
+                    isSaved={isSaved}
+                    wordDetails={wordDetails}
+                    showTranslation={showTranslation}
+                    onAddToWordbook={handleAddToWordbook}
+                    onReloadPage={handlePageReload}
+                />
+            )}
             
             {!file ? (
                 <FileDropArea
