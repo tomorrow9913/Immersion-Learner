@@ -11,6 +11,7 @@ const FlashCardMode = () => {
     
     
     const [isRotating, setIsRotating] = useState(false);
+    const [isAnimatingOut, setIsAnimatingOut] = useState<'next' | 'prev' | null>(null);
 
     const getCardData = (position: 'prev' | 'current' | 'next') => {
         if (words.length === 0) return null;
@@ -27,17 +28,22 @@ const FlashCardMode = () => {
                 index = (currentIndex + 1) % words.length;
                 break;
         }
+
+        const isCurrentCardAnimatingOut = isAnimatingOut && position === 'current';
         
         return {
             word: words[index],
             index,
             isCenter: position === 'current',
             zIndex: position === 'current' ? 20 : position === 'prev' ? 10 : 5,
-            scale: position === 'current' ? 1 : 0.9,
-            opacity: position === 'current' ? 1 : 0.8,
-            translateX: position === 'current' ? 0 : position === 'prev' ? -40 : 40,
-            translateY: position === 'current' ? 0 : 15,
+            scale: isCurrentCardAnimatingOut ? 1.1 : (position === 'current' ? 1 : 0.9),
+            opacity: isCurrentCardAnimatingOut ? 0 : (position === 'current' ? 1 : 0.8),
+            translateX: isCurrentCardAnimatingOut 
+                ? (isAnimatingOut === 'next' ? 100 : -100)
+                : (position === 'current' ? 0 : position === 'prev' ? -40 : 40),
+            translateY: isCurrentCardAnimatingOut ? -50 : (position === 'current' ? 0 : 15),
             rotateY: position === 'current' ? 0 : position === 'prev' ? 10 : -10,
+            rotateZ: isCurrentCardAnimatingOut ? (isAnimatingOut === 'next' ? 15 : -15) : 0,
         };
     };
 
@@ -57,19 +63,19 @@ const FlashCardMode = () => {
 
     const handleNext = () => {
         setFlipped(false);
-        setIsRotating(true);
+        setIsAnimatingOut('next');
         setTimeout(() => {
             setCurrentIndex((prevIndex) => (prevIndex + 1) % words.length);
-            setIsRotating(false);
+            setIsAnimatingOut(null);
         }, 600);
     };
 
     const handlePrev = () => {
         setFlipped(false);
-        setIsRotating(true);
+        setIsAnimatingOut('prev');
         setTimeout(() => {
             setCurrentIndex((prevIndex) => (prevIndex === 0 ? words.length - 1 : prevIndex - 1));
-            setIsRotating(false);
+            setIsAnimatingOut(null);
         }, 600);
     };
 
@@ -127,7 +133,7 @@ const FlashCardMode = () => {
                                 isCurrentCard && isRotating ? 'pointer-events-none' : isCurrentCard ? 'group' : ''
                             }`}
                             style={{
-                                transform: `translateX(${cardData.translateX}%) translateY(${cardData.translateY}px) scale(${cardData.scale}) rotateY(${cardData.rotateY}deg)`,
+                                transform: `translateX(${cardData.translateX}%) translateY(${cardData.translateY}px) scale(${cardData.scale}) rotateY(${cardData.rotateY}deg) rotate(${cardData.rotateZ}deg)`,
                                 zIndex: cardData.zIndex,
                                 opacity: cardData.opacity,
                                 transition: 'all 0.6s ease-in-out',
