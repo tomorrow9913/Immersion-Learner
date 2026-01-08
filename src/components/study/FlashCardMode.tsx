@@ -10,40 +10,34 @@ const FlashCardMode = () => {
     
     
     
-    const [isRotating, setIsRotating] = useState(false);
-    const [isAnimatingOut, setIsAnimatingOut] = useState<'next' | 'prev' | null>(null);
+    const [rotation, setRotation] = useState(0);
 
     const getCardData = (position: 'prev' | 'current' | 'next') => {
         if (words.length === 0) return null;
         
         let index;
+        let cardRotation = 0;
         switch (position) {
             case 'prev':
                 index = currentIndex === 0 ? words.length - 1 : currentIndex - 1;
+                cardRotation = -60;
                 break;
             case 'current':
                 index = currentIndex;
+                cardRotation = 0;
                 break;
             case 'next':
                 index = (currentIndex + 1) % words.length;
+                cardRotation = 60;
                 break;
         }
-
-        const isCurrentCardAnimatingOut = isAnimatingOut && position === 'current';
         
         return {
             word: words[index],
             index,
             isCenter: position === 'current',
-            zIndex: position === 'current' ? 20 : position === 'prev' ? 10 : 5,
-            scale: isCurrentCardAnimatingOut ? 1.1 : (position === 'current' ? 1 : 0.9),
-            opacity: isCurrentCardAnimatingOut ? 0 : (position === 'current' ? 1 : 0.8),
-            translateX: isCurrentCardAnimatingOut 
-                ? (isAnimatingOut === 'next' ? 100 : -100)
-                : (position === 'current' ? 0 : position === 'prev' ? -40 : 40),
-            translateY: isCurrentCardAnimatingOut ? -50 : (position === 'current' ? 0 : 15),
-            rotateY: position === 'current' ? 0 : position === 'prev' ? 10 : -10,
-            rotateZ: isCurrentCardAnimatingOut ? (isAnimatingOut === 'next' ? 15 : -15) : 0,
+            transform: `rotateY(${cardRotation}deg) translateZ(250px)`,
+            zIndex: position === 'current' ? 20 : 10,
         };
     };
 
@@ -63,38 +57,27 @@ const FlashCardMode = () => {
 
     const handleNext = () => {
         setFlipped(false);
-        setIsAnimatingOut('next');
+        setRotation((prev) => prev - 60);
         setTimeout(() => {
             setCurrentIndex((prevIndex) => (prevIndex + 1) % words.length);
-            setIsAnimatingOut(null);
-        }, 600);
+        }, 300);
     };
 
     const handlePrev = () => {
         setFlipped(false);
-        setIsAnimatingOut('prev');
+        setRotation((prev) => prev + 60);
         setTimeout(() => {
             setCurrentIndex((prevIndex) => (prevIndex === 0 ? words.length - 1 : prevIndex - 1));
-            setIsAnimatingOut(null);
-        }, 600);
+        }, 300);
     };
 
     const handleCardClick = (position: 'prev' | 'current' | 'next') => {
         if (position === 'current') {
-            if (!isRotating) {
-                setFlipped(!flipped);
-            }
-        } else if (!isRotating) {
-            setFlipped(false);
-            setIsRotating(true);
-            setTimeout(() => {
-                if (position === 'prev') {
-                    setCurrentIndex((prevIndex) => (prevIndex === 0 ? words.length - 1 : prevIndex - 1));
-                } else {
-                    setCurrentIndex((prevIndex) => (prevIndex + 1) % words.length);
-                }
-                setIsRotating(false);
-            }, 600);
+            setFlipped(!flipped);
+        } else if (position === 'next') {
+            handleNext();
+        } else {
+            handlePrev();
         }
     };
 
@@ -119,7 +102,15 @@ const FlashCardMode = () => {
         <div className="flex flex-col items-center justify-center py-10 px-4 min-h-screen">
             
 
-            <div className="relative w-full max-w-6xl h-80 md:h-96 flex items-center justify-center" style={{ perspective: '1000px' }}>
+            <div 
+                className="relative w-full max-w-md h-80 md:h-96"
+                style={{
+                    perspective: '1000px',
+                    transformStyle: 'preserve-3d',
+                    transition: 'transform 0.6s ease-in-out',
+                    transform: `rotateY(${rotation}deg)`,
+                }}
+            >
                 {['prev', 'current', 'next'].map((position) => {
                     const cardData = getCardData(position as 'prev' | 'current' | 'next');
                     if (!cardData) return null;
@@ -129,14 +120,11 @@ const FlashCardMode = () => {
                     return (
                         <div
                             key={position}
-                            className={`absolute w-full max-w-md h-80 md:h-96 cursor-pointer ${
-                                isCurrentCard && isRotating ? 'pointer-events-none' : isCurrentCard ? 'group' : ''
-                            }`}
+                            className={`absolute w-full h-full cursor-pointer`}
                             style={{
-                                transform: `translateX(${cardData.translateX}%) translateY(${cardData.translateY}px) scale(${cardData.scale}) rotateY(${cardData.rotateY}deg) rotate(${cardData.rotateZ}deg)`,
+                                transform: cardData.transform,
                                 zIndex: cardData.zIndex,
-                                opacity: cardData.opacity,
-                                transition: 'all 0.6s ease-in-out',
+                                transition: 'transform 0.6s ease-in-out, opacity 0.6s ease-in-out',
                             }}
                             onClick={() => handleCardClick(position as 'prev' | 'current' | 'next')}
                         >
