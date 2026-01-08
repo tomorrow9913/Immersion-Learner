@@ -1,18 +1,20 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import TranslationPopup from '@/components/TranslationPopup';
 import { MultiStackAlert } from '@/components/common';
 import { useMultiAlert } from '@/hooks/useMultiAlert';
 import { useTextSelection } from '@/hooks/useTextSelection';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useDebounce } from '@/hooks/useDebounce';
 import alertService from '@/services/AlertService';
 
 const ContentApp = () => {
   const [showReloadButton, setShowReloadButton] = useState(false);
-  const debounceTimerRef = useRef<number | null>(null);
 
   const { alerts, addAlert, clearAlert } = useMultiAlert();
   const { selection: { text: selectedText }, popupPosition, clearSelection } = useTextSelection();
   
+  const debouncedSelectedText = useDebounce(selectedText, 300);
+
   const {
     selectedText: translatedSelectedText,
     translation,
@@ -40,24 +42,12 @@ const ContentApp = () => {
   }, [error, addAlert]);
 
   useEffect(() => {
-    if (selectedText && popupPosition) {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-      
-      debounceTimerRef.current = window.setTimeout(() => {
-        translateText(selectedText);
-      }, 300);
+    if (debouncedSelectedText && popupPosition) {
+      translateText(debouncedSelectedText);
     } else {
       resetTranslation();
     }
-
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
-  }, [selectedText, popupPosition, translateText, resetTranslation]);
+  }, [debouncedSelectedText, popupPosition, translateText, resetTranslation]);
 
   const handleAddToWordbook = useCallback(() => {
     addToWordbook(translatedSelectedText, translation);
