@@ -34,11 +34,24 @@ describe('useTranslation', () => {
   });
 
   it('should call translateText and update state', async () => {
-    const mockResponse = [[['안녕하세요', 'hello']]];
-    (globalThis.fetch as any).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockResponse),
-    });
+    const mockResponse = {
+      success: true,
+      translatedText: '안녕하세요',
+      dictionaryData: null,
+    };
+
+    global.chrome = {
+      runtime: {
+        sendMessage: vi.fn((message, callback) => {
+          if (callback) {
+            callback(mockResponse);
+          }
+          return Promise.resolve(mockResponse);
+        }),
+        id: 'test-id',
+        lastError: undefined
+      },
+    } as any;
 
     const { result } = renderHook(() => useTranslation());
     
@@ -46,10 +59,7 @@ describe('useTranslation', () => {
       await result.current.translateText('hello');
     });
 
-    // Note: Due to the internal architecture of useTranslation using multiple hooks,
-    // we might need to be careful with how state updates are propagated.
-    // In this specific implementation, useTranslationActions uses its own internal useTranslationState
-    // which is different from the one in useTranslation. This is a BUG in the original code!
-    // But for testing purposes, we'll see if it works.
+    expect(result.current.translation).toBe('안녕하세요');
+    expect(result.current.isTranslating).toBe(false);
   });
 });
