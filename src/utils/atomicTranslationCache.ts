@@ -16,16 +16,21 @@ interface PageLock {
 }
 
 class AtomicTranslationCache {
-  private locks: Map<number, PageLock> = new Map();
-  private pendingOperations: Map<number, Promise<void>> = new Map();
+  private locks: Map<string, PageLock> = new Map();
+  private pendingOperations: Map<string, Promise<void>> = new Map();
 
-  private async acquirePageLock(pageNumber: number): Promise<boolean> {
-    const existingLock = this.locks.get(pageNumber);
+  private getKey(docId: string, pageNumber: number): string {
+    return `${docId}_${pageNumber}`;
+  }
+
+  private async acquirePageLock(docId: string, pageNumber: number): Promise<boolean> {
+    const key = this.getKey(docId, pageNumber);
+    const existingLock = this.locks.get(key);
     
     if (existingLock && existingLock.pending) {
       const isExpired = Date.now() - existingLock.timestamp > 5000;
       if (isExpired) {
-        this.locks.delete(pageNumber);
+        this.locks.delete(key);
       } else {
         return false;
       }
@@ -37,44 +42,50 @@ class AtomicTranslationCache {
       timestamp: Date.now()
     };
 
-    this.locks.set(pageNumber, newLock);
+    this.locks.set(key, newLock);
     return true;
   }
 
-  private releasePageLock(pageNumber: number, newVersion: number): void {
-    const lock = this.locks.get(pageNumber);
+  private releasePageLock(docId: string, pageNumber: number, newVersion: number): void {
+    const key = this.getKey(docId, pageNumber);
+    const lock = this.locks.get(key);
     if (lock && lock.version === newVersion - 1) {
-      this.locks.set(pageNumber, {
+      this.locks.set(key, {
         ...lock,
         pending: false,
         version: newVersion
       });
     }
     
-    this.pendingOperations.delete(pageNumber);
+    this.pendingOperations.delete(key);
   }
 
-  async storePageTranslation(pageNumber: number, sentences: SentenceTranslation[]): Promise<void> {
-    const lockAcquired = await this.acquirePageLock(pageNumber);
+  async storePageTranslation(docId: string, pageNumber: number, sentences: SentenceTranslation[]): Promise<void> {
+    if (!docId) return;
+    
+    const lockAcquired = await this.acquirePageLock(docId, pageNumber);
     if (!lockAcquired) {
-      const lockRelease = await this.waitForLockRelease(pageNumber);
+      const lockRelease = await this.waitForLockRelease(docId, pageNumber);
       return lockRelease;
     }
 
-    const operation = this.performAtomicStore(pageNumber, sentences);
-    this.pendingOperations.set(pageNumber, operation);
+    const operation = this.performAtomicStore(docId, pageNumber, sentences);
+    const key = this.getKey(docId, pageNumber);
+    this.pendingOperations.set(key, operation);
 
     try {
       await operation;
     } finally {
-      const lock = this.locks.get(pageNumber);
+      const lock = this.locks.get(key);
       if (lock) {
-        this.releasePageLock(pageNumber, lock.version + 1);
+        this.releasePageLock(docId, pageNumber, lock.version + 1);
       }
     }
   }
 
-  private async performAtomicStore(pageNumber: number, sentences: any[]): Promise<void> {
+  private async performAtomicStore(docId: string, pageNumber: number, sentences: any[]): Promise<void> {
+    const key = this.getKey(docId, pageNumber);
+    
     return new Promise((resolve, reject) => {
       const request = indexedDB.open('TranslationCache', 1);
       
@@ -96,7 +107,7 @@ class AtomicTranslationCache {
           };
           
           // First, get existing cache
-          const getRequest = store.get(pageNumber);
+          const getRequest = store.get(key);
           getRequest.onerror = () => {
             reject(new Error('Failed to read existing cache'));
           };
@@ -115,7 +126,7 @@ class AtomicTranslationCache {
             };
             
             if (existingCache) {
-              const updateRequest = store.put(newCache);
+              const updateRequest = store.put(newCache, key);
               updateRequest.onerror = () => {
                 reject(new Error('Failed to update cache'));
               };
@@ -123,7 +134,7 @@ class AtomicTranslationCache {
                 resolve();
               };
             } else {
-              const addRequest = store.add(newCache);
+              const addRequest = store.add(newCache, key);
               addRequest.onerror = () => {
                 reject(new Error('Failed to add cache'));
               };
@@ -139,10 +150,12 @@ class AtomicTranslationCache {
     });
   }
 
-  private async waitForLockRelease(pageNumber: number): Promise<void> {
+  private async waitForLockRelease(docId: string, pageNumber: number): Promise<void> {
+    const key = this.getKey(docId, pageNumber);
+    
     return new Promise((resolve) => {
       const checkLock = () => {
-        const lock = this.locks.get(pageNumber);
+        const lock = this.locks.get(key);
         if (!lock || !lock.pending) {
           resolve();
         } else {
@@ -154,8 +167,10 @@ class AtomicTranslationCache {
     });
   }
 
-  async storeSentence(sentence: SentenceTranslation): Promise<void> {
-    const existingCache = await this.getPageTranslation(sentence.pageNumber);
+  async storeSentence(docId: string, sentence: SentenceTranslation): Promise<void> {
+    if (!docId) return;
+    
+    const existingCache = await this.getPageTranslation(docId, sentence.pageNumber);
     
     if (existingCache) {
       const existingSentenceIndex = existingCache.sentences.findIndex(
@@ -169,13 +184,16 @@ class AtomicTranslationCache {
       }
       
       existingCache.sentences.sort((a, b) => a.sentenceIndex - b.sentenceIndex);
-      await this.storePageTranslation(sentence.pageNumber, existingCache.sentences);
+      await this.storePageTranslation(docId, sentence.pageNumber, existingCache.sentences);
     } else {
-      await this.storePageTranslation(sentence.pageNumber, [sentence]);
+      await this.storePageTranslation(docId, sentence.pageNumber, [sentence]);
     }
   }
 
-  async getPageTranslation(pageNumber: number): Promise<PageTranslationCache | null> {
+  async getPageTranslation(docId: string, pageNumber: number): Promise<PageTranslationCache | null> {
+    if (!docId) return null;
+    
+    const key = this.getKey(docId, pageNumber);
     const request = indexedDB.open('TranslationCache', 1);
     
     return new Promise((resolve, reject) => {
@@ -190,9 +208,18 @@ class AtomicTranslationCache {
           reject(new Error('Failed to read cache'));
         };
         
-        const getRequest = store.get(pageNumber);
+        const getRequest = store.get(key);
         getRequest.onsuccess = () => {
-          resolve(getRequest.result);
+          const result = getRequest.result;
+          // 유효기간 (예: 7일) 체크
+          const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+          if (result && Date.now() - result.createdAt > SEVEN_DAYS) {
+            // 만료된 데이터 삭제
+            store.delete(key);
+            resolve(null);
+          } else {
+            resolve(result);
+          }
         };
       };
     });
@@ -264,6 +291,55 @@ class AtomicTranslationCache {
           // Index might not exist, skip cleanup
           resolve();
         }
+      };
+    });
+  }
+
+  // [추가] 특정 문서의 캐시만 지우는 기능 (필요 시)
+  async clearDocumentCache(docId: string): Promise<void> {
+    if (!docId) return;
+    
+    const request = indexedDB.open('TranslationCache', 1);
+    
+    return new Promise((resolve, reject) => {
+      request.onerror = () => reject(new Error('Failed to open IndexedDB'));
+      
+      request.onsuccess = () => {
+        const db = request.result;
+        const transaction = db.transaction(['pageTranslations'], 'readwrite');
+        const store = transaction.objectStore('pageTranslations');
+        
+        transaction.onerror = () => {
+          reject(new Error('Failed to clear document cache'));
+        };
+        
+        transaction.oncomplete = () => {
+          // 해당 문서의 모든 락도 제거
+          const keysToDelete = Array.from(this.locks.keys()).filter(key => key.startsWith(docId + '_'));
+          keysToDelete.forEach(key => {
+            this.locks.delete(key);
+            this.pendingOperations.delete(key);
+          });
+          resolve();
+        };
+        
+        const getAllRequest = store.getAllKeys();
+        getAllRequest.onsuccess = () => {
+          const allKeys = getAllRequest.result;
+          const keysToDelete = allKeys.filter(key => String(key).startsWith(docId + '_'));
+          
+          const deletePromises = keysToDelete.map(key => {
+            return new Promise<void>((deleteResolve, deleteReject) => {
+              const deleteRequest = store.delete(key);
+              deleteRequest.onsuccess = () => deleteResolve();
+              deleteRequest.onerror = () => deleteReject(new Error(`Failed to delete key: ${key}`));
+            });
+          });
+          
+          Promise.all(deletePromises).then(() => {
+            resolve();
+          }).catch(reject);
+        };
       };
     });
   }

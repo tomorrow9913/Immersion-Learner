@@ -23,6 +23,16 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
   // [추가] 페이지 변경 감지를 위한 이전 페이지 저장
   const previousPageRef = useRef<number>(0);
 
+  const docId = pdf?.fingerprints?.[0] || '';
+
+  useEffect(() => {
+    if (docId) {
+      setTranslations(new Map());
+      setFailedPages(new Set());
+      pendingPages.current.clear();
+    }
+  }, [docId]);
+
   // [추가] Tab 이동 감지: 다른 페이지로 이동했다가 다시 돌아올 때만 실패 목록 초기화
   const isRevisitingPage = useCallback((newPage: number) => {
     // 현재 페이지와 새 페이지가 다르고, 이전 페이지로 돌아가는 경우에만 재시도 허용
@@ -70,8 +80,8 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
     }
   }, [pdf]);
 
-  const translatePageSentences = useCallback(async (pageNumber: number, priority: 'high' | 'normal' | 'low' = 'normal') => {
-    if (!pdf) return;
+const translatePageSentences = useCallback(async (pageNumber: number, priority: 'high' | 'normal' | 'low' = 'normal') => {
+    if (!pdf || !docId) return;
 
     // [Safety Check] 처리 중이거나, 이미 성공했거나, '실패 목록'에 있다면 중단
     // 단, Re-visit 시에는 isRevisitingPage 체크로 재시도 허용
@@ -81,8 +91,7 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
       return;
     }
 
-    // ... 캐시 확인 로직 ...
-    const cached = await translationCache.getPageTranslation(pageNumber);
+    const cached = await translationCache.getPageTranslation(docId, pageNumber);
     if (cached && cached.sentences.length > 0) {
       setTranslations(prev => new Map(prev).set(pageNumber, cached.sentences));
       return;
@@ -113,9 +122,9 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
 
       const results = await Promise.all(translationPromises);
       
-      // 성공 시 저장
+// 성공 시 저장
       setTranslations(prev => new Map(prev).set(pageNumber, results));
-      await translationCache.storePageTranslation(pageNumber, results);
+      await translationCache.storePageTranslation(docId, pageNumber, results);
     } catch (err) {
       console.error(`페이지 ${pageNumber} 번역 실패:`, err);
       // [수정] 실패 시 translations 맵에는 아무것도 넣지 않음 (그래야 재시도 가능)
@@ -127,7 +136,7 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
       pendingPages.current.delete(pageNumber);
       if (priority === 'high') setIsTranslating(false);
     }
-  }, [pdf, extractSentencesFromPage, translations, failedPages]);
+  }, [pdf, docId, extractSentencesFromPage, translations, failedPages]);
 
   const prefetchPages = useCallback((basePage: number) => {
     if (!pdf) return;
