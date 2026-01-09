@@ -80,7 +80,7 @@ const PDFReader = () => {
         currentPageTranslations,
         isTranslating,
         error,
-        prioritizeCurrentPage
+        translatePageSentences
     } = useSentenceTranslation({ 
         pdf: pdfDocument, 
         currentPage: pageNumber 
@@ -126,9 +126,9 @@ const PDFReader = () => {
 
     useEffect(() => {
         if (pdfDocument && pageNumber > 0) {
-            prioritizeCurrentPage(pageNumber);
+            translatePageSentences(pageNumber, 'high');
         }
-    }, [pdfDocument, pageNumber, prioritizeCurrentPage]);
+    }, [pdfDocument, pageNumber, translatePageSentences]);
 
     const handleDocumentLoadSuccess = (pdf: PDFDocumentProxy) => {
         console.log('PDF loaded successfully, pages:', pdf.numPages);

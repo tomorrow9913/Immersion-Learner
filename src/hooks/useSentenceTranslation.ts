@@ -14,6 +14,8 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
   const [translations, setTranslations] = useState<Map<number, SentenceTranslation[]>>(new Map());
   const [isTranslating, setIsTranslating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // failedPages State가 반드시 있어야 합니다: const [failedPages, setFailedPages] = useState<Set<number>>(new Set());
+  const [failedPages, setFailedPages] = useState<Set<number>>(new Set());
   
   // [수정 1] 중복 요청 방지용 Ref (렌더링 없이 상태 추적)
   const pendingPages = useRef<Set<number>>(new Set());
@@ -61,32 +63,32 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
   const translatePageSentences = useCallback(async (pageNumber: number, priority: 'high' | 'normal' | 'low' = 'normal') => {
     if (!pdf) return;
 
-    // [수정 2] 핵심 가드 절: 처리 중이거나 완료된 페이지는 즉시 중단
-    if (pendingPages.current.has(pageNumber) || translations.has(pageNumber)) {
+    // [Safety Check] 처리 중이거나, 이미 성공했거나, '실패 목록'에 있다면 중단
+    if (pendingPages.current.has(pageNumber) || translations.has(pageNumber) || failedPages.has(pageNumber)) {
       return;
     }
 
-    // 캐시 확인
+    // ... 캐시 확인 로직 ...
     const cached = await translationCache.getPageTranslation(pageNumber);
     if (cached && cached.sentences.length > 0) {
       setTranslations(prev => new Map(prev).set(pageNumber, cached.sentences));
       return;
     }
 
-    pendingPages.current.add(pageNumber); // 처리 시작 표시
+    pendingPages.current.add(pageNumber);
+    // ...
     if (priority === 'high') {
       setIsTranslating(true);
       setError(null);
     }
 
     try {
+      // ... 번역 로직 ...
       const sentences = await extractSentencesFromPage(pageNumber);
       if (sentences.length === 0) {
-        setTranslations(prev => new Map(prev).set(pageNumber, [])); // 빈 결과라도 저장해서 재시도 방지
-        return;
+        return; // 빈 결과는 저장하지 않고 그냥 리턴
       }
 
-      // [수정 3] storeSentence 제거하여 DB 부하 감소
       const translationPromises = sentences.map((sentence, index) => 
         translationQueue.addToQueue(
           sentence,
@@ -98,23 +100,21 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
 
       const results = await Promise.all(translationPromises);
       
+      // 성공 시 저장
       setTranslations(prev => new Map(prev).set(pageNumber, results));
-
-      // [수정 4] 페이지 단위로 한 번만 저장
       await translationCache.storePageTranslation(pageNumber, results);
     } catch (err) {
       console.error(`페이지 ${pageNumber} 번역 실패:`, err);
-      const message = err instanceof Error ? err.message : String(err);
-      if (priority === 'high') setError(message);
-
-      // [수정 5] 실패 시에도 '빈 배열'을 상태에 넣어 무한 재요청 루프 끊기
-      // (사용자가 '재시도' 버튼을 누르기 전까지는 자동 재시도 안 함)
-      setTranslations(prev => new Map(prev).set(pageNumber, []));
+      // [수정] 실패 시 translations 맵에는 아무것도 넣지 않음 (그래야 재시도 가능)
+      // 대신 failedPages에 등록하여 무한 루프 방지
+      setFailedPages(prev => new Set(prev).add(pageNumber));
+      
+      if (priority === 'high') setError(err instanceof Error ? err.message : String(err));
     } finally {
-      pendingPages.current.delete(pageNumber); // 처리 완료 표시 해제
+      pendingPages.current.delete(pageNumber);
       if (priority === 'high') setIsTranslating(false);
     }
-  }, [pdf, extractSentencesFromPage, translations]);
+  }, [pdf, extractSentencesFromPage, translations, failedPages]);
 
   const prefetchPages = useCallback((basePage: number) => {
     if (!pdf) return;
@@ -122,33 +122,54 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
     // [수정 6] 프리페치 시에도 이미 번역된 페이지는 스킵
     const targets = [basePage + 1, basePage + 2];
     targets.forEach(page => {
-      if (page <= pdf.numPages && !translations.has(page) && !pendingPages.current.has(page)) {
+      if (page <= pdf.numPages && !translations.has(page) && !pendingPages.current.has(page) && !failedPages.has(page)) {
         requestIdleCallback(() => translatePageSentences(page, 'normal'));
       }
     });
-  }, [pdf, translatePageSentences, translations]);
+  }, [pdf, translatePageSentences, translations, failedPages]);
 
+  // [핵심 수정] 페이지 방문 시 'Retry' 기회를 주는 Effect
   useEffect(() => {
     if (pdf && currentPage > 0) {
-      // 현재 페이지가 번역되지 않았다면 요청
+      // 1. 만약 현재 페이지가 이전에 실패했던 페이지라면? -> 실패 목록에서 제거 (재시도 기회 부여)
+      if (failedPages.has(currentPage)) {
+        setFailedPages(prev => {
+          const next = new Set(prev);
+          next.delete(currentPage);
+          return next;
+        });
+        // State가 변경되면 리렌더링되면서 아래 로직이 다시 실행되므로 여기선 return
+        return;
+      }
+
+      // 2. 번역 데이터가 없으면 요청 시작
       if (!translations.has(currentPage)) {
         translatePageSentences(currentPage, 'high');
       }
+
       prefetchPages(currentPage);
     }
-  }, [pdf, currentPage, translatePageSentences, prefetchPages, translations]); // translations 의존성 중요
+  }, [pdf, currentPage, translatePageSentences, prefetchPages, translations, failedPages]);
 
   return {
     translations,
     currentPageTranslations: translations.get(currentPage) || [],
     isTranslating,
     error,
+    failedPages,
     translatePageSentences,
-    // ... 
-    prioritizeCurrentPage: (p: number) => translatePageSentences(p, 'high'), // 단순화
+    retryFailedPage: useCallback((pageNumber: number) => {
+      setFailedPages(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(pageNumber);
+        return newSet;
+      });
+      translatePageSentences(pageNumber, 'high');
+    }, [translatePageSentences]),
     clearCache: useCallback(() => {
       translationCache.clear();
       setTranslations(new Map());
+      setFailedPages(new Set());
       pendingPages.current.clear();
     }, [])
   };
