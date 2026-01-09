@@ -1,6 +1,8 @@
 import { fetchWithRetry } from '@/utils/retry';
 
-type GoogleTranslateResponse = Array<Array<[string, string, ...any[]]>>;
+type GoogleTranslateSentence = [string, string, ...any[]];
+type GoogleTranslateResponse = [GoogleTranslateSentence[], ...any[]];
+
 
 interface DictionaryEntry {
   phonetic?: string;
@@ -23,16 +25,14 @@ interface DictionaryResult {
   examples: string[];
 }
 
+// [수정 2] 타입 가드 변경 (data 프로퍼티 검사 제거)
 function isGoogleTranslateResponse(data: any): data is GoogleTranslateResponse {
   return (
     Array.isArray(data) &&
     data.length > 0 &&
-    Array.isArray(data[0]) &&
-    data[0].length > 0 &&
-    typeof data[0][0] === 'string'
+    Array.isArray(data[0])
   );
 }
-
 function isDictionaryData(data: any): data is DictionaryEntry[] {
   return (
     Array.isArray(data) &&
@@ -58,23 +58,34 @@ export async function translateText(text: string, targetLang = 'ko'): Promise<st
     );
 
     const rawData = await response.text();
+
+    // [추가] HTML 에러 응답(차단됨) 감지
+    if (rawData.trim().startsWith('<')) {
+      console.error('API Error (HTML received):', rawData.substring(0, 100));
+      throw new Error('번역 서비스가 일시적으로 제한되었습니다.');
+    }
+
     const data = JSON.parse(rawData);
-    
+
+    // [수정 3] 파싱 로직 변경
     if (isGoogleTranslateResponse(data)) {
-      const translatedText = data[0].map((item: any) => item[0]).join('');
-      if (translatedText.trim().length === 0) {
+      const translatedText = data[0]
+        .map((item) => (Array.isArray(item) ? item[0] : ''))
+        .filter(Boolean)
+        .join('');
+
+      if (!translatedText.trim()) {
         throw new Error('번역 결과가 비어있습니다.');
       }
       return translatedText;
     }
-    
+
+    console.warn('Unknown format:', data);
     throw new Error('잘못된 응답 형식입니다.');
   } catch (error) {
     console.error('번역 API 처리 중 오류 발생:', error);
-    if (error instanceof Error && error.message.includes('Retriable error')) {
-      throw new Error('일시적인 번역 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
-    }
-    throw new Error('번역에 실패했습니다. 네트워크 연결을 확인하거나 나중에 다시 시도해주세요.');
+    if (error instanceof Error) throw error;
+    throw new Error('번역에 실패했습니다.');
   }
 }
 
@@ -82,36 +93,36 @@ export async function getDictionaryData(word: string): Promise<DictionaryResult 
   if (!word || word.trim().length === 0) {
     return null;
   }
-  
+
   try {
     const response = await fetchWithRetry(
       `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`
     );
-    
+
     if (!response.ok) {
       return null;
     }
-    
+
     const rawData = await response.text();
     if (!rawData) {
       return null;
     }
-    
+
     const data = JSON.parse(rawData);
-    
+
     if (isDictionaryData(data) && data.length > 0) {
       const firstEntry = data[0];
       const phonetic = firstEntry.phonetic || firstEntry.phonetics?.find((p) => p.text)?.text;
       const audioUrl = firstEntry.phonetics?.find((p) => p.audio)?.audio;
-      
-      const meanings = firstEntry.meanings?.flatMap((meaning) => 
+
+      const meanings = firstEntry.meanings?.flatMap((meaning) =>
         meaning.definitions?.map((def) => def.definition).filter((def): def is string => Boolean(def)) || []
       ) || [];
-      
-      const examples = firstEntry.meanings?.flatMap((meaning) => 
+
+      const examples = firstEntry.meanings?.flatMap((meaning) =>
         meaning.definitions?.map((def) => def.example).filter((example): example is string => Boolean(example)) || []
       ) || [];
-      
+
       return {
         phonetic,
         audioUrl,
