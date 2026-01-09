@@ -2,22 +2,17 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { SentenceTranslation } from '@/types/translation';
 import type { TextFragment } from './pdfTextAssembler';
 
+
+
 export interface ProcessedSentence {
   id: string;
   text: string;
-  coordinates: Array<Coordinate>;
+  coordinates: Array<ProcessorCoordinate>;
   sentenceIndex: number;
   fragments: TextFragment[];
 }
 
-export interface Coordinate {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-export interface Coordinate {
+interface ProcessorCoordinate {
   x: number;
   y: number;
   width: number;
@@ -110,7 +105,7 @@ export class PDFTextProcessor {
     fragments: TextFragment[]
   ): ProcessedSentence[] {
     return translations.map((translation) => {
-      const matchedFragments = this.findFragmentsForSentence(
+      const matchedFragments = this.findFragmentsForSentenceOptimized(
         translation.originalText,
         fragments
       );
@@ -118,38 +113,40 @@ export class PDFTextProcessor {
       return {
         id: translation.id,
         text: translation.originalText,
-        coordinates: matchedFragments.map(fragment => fragment.position!),
+        coordinates: matchedFragments.map((fragment: TextFragment) => fragment.position!),
         sentenceIndex: translation.sentenceIndex,
         fragments: matchedFragments
       };
     });
   }
 
-  private findFragmentsForSentence(
+  private findFragmentsForSentenceOptimized(
     sentence: string,
     fragments: TextFragment[]
   ): TextFragment[] {
-    const sentenceWords = sentence.toLowerCase().split(/\s+/);
+    const normalizedSentence = sentence.toLowerCase().trim();
     const matchedFragments: TextFragment[] = [];
-    let remainingWords = [...sentenceWords];
+    let remainingText = normalizedSentence;
     const usedIndices = new Set<number>();
 
     fragments.forEach((fragment, index) => {
-      if (usedIndices.has(index)) return;
+      if (usedIndices.has(index) || !fragment.position) return;
 
       const fragmentText = fragment.text.toLowerCase().trim();
-      const fragmentWords = fragmentText.split(/\s+/);
+      if (!fragmentText) return;
 
-      if (fragmentWords.length === 0) return;
+      const fragmentIndex = remainingText.indexOf(fragmentText);
+      if (fragmentIndex !== -1) {
+        const isSequentialMatch = this.validateFragmentPosition(
+          remainingText,
+          fragmentText,
+          fragmentIndex
+        );
 
-      for (let i = 0; i <= remainingWords.length - fragmentWords.length; i++) {
-        const window = remainingWords.slice(i, i + fragmentWords.length);
-        
-        if (this.areWordsSimilar(window, fragmentWords)) {
+        if (isSequentialMatch) {
           matchedFragments.push(fragment);
           usedIndices.add(index);
-          remainingWords.splice(i, fragmentWords.length);
-          break;
+          remainingText = remainingText.substring(fragmentIndex + fragmentText.length).trim();
         }
       }
     });
@@ -157,31 +154,33 @@ export class PDFTextProcessor {
     return matchedFragments;
   }
 
-  private areWordsSimilar(words1: string[], words2: string[]): boolean {
-    if (words1.length !== words2.length) return false;
-    
-    return words1.every((word, index) => {
-      return this.isWordSimilar(word, words2[index]);
-    });
-  }
+  private validateFragmentPosition(
+    remainingText: string,
+    fragmentText: string,
+    foundIndex: number
+  ): boolean {
+    if (foundIndex === 0) return true;
 
-  private isWordSimilar(word1: string, word2: string): boolean {
-    const clean1 = word1.replace(/[^\w]/g, '');
-    const clean2 = word2.replace(/[^\w]/g, '');
+    const beforeFragment = remainingText.substring(0, foundIndex);
+    const hasValidSeparator = /^[.\s]*$/.test(beforeFragment);
     
-    if (clean1.length === 0 || clean2.length === 0) return false;
+    if (hasValidSeparator) return true;
+
+    const words = remainingText.split(/\s+/);
+    const fragmentWords = fragmentText.split(/\s+/);
     
-    if (clean1 === clean2) return true;
-    
-    if (Math.abs(clean1.length - clean2.length) <= 2) {
-      const longer = clean1.length > clean2.length ? clean1 : clean2;
-      const shorter = clean1.length > clean2.length ? clean2 : clean1;
-      
-      return longer.includes(shorter) || shorter.includes(longer);
+    let wordIndex = 0;
+    for (const word of words) {
+      if (word.toLowerCase() === fragmentWords[0]) {
+        wordIndex++;
+        break;
+      }
     }
     
-    return false;
+    return wordIndex > 0 && fragmentWords.length <= words.length - wordIndex + 1;
   }
+
+
 
   getProcessingResult(pageNumber: number, scale: number): PageTextProcessing | null {
     const cacheKey = `page-${pageNumber}-${scale}`;

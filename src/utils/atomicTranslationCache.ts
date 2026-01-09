@@ -54,7 +54,7 @@ class AtomicTranslationCache {
     this.pendingOperations.delete(pageNumber);
   }
 
-  async storePageTranslation(pageNumber: number, sentences: any[]): Promise<void> {
+  async storePageTranslation(pageNumber: number, sentences: SentenceTranslation[]): Promise<void> {
     const lockAcquired = await this.acquirePageLock(pageNumber);
     if (!lockAcquired) {
       const lockRelease = await this.waitForLockRelease(pageNumber);
@@ -154,6 +154,27 @@ class AtomicTranslationCache {
     });
   }
 
+  async storeSentence(sentence: SentenceTranslation): Promise<void> {
+    const existingCache = await this.getPageTranslation(sentence.pageNumber);
+    
+    if (existingCache) {
+      const existingSentenceIndex = existingCache.sentences.findIndex(
+        s => s.id === sentence.id
+      );
+      
+      if (existingSentenceIndex >= 0) {
+        existingCache.sentences[existingSentenceIndex] = sentence;
+      } else {
+        existingCache.sentences.push(sentence);
+      }
+      
+      existingCache.sentences.sort((a, b) => a.sentenceIndex - b.sentenceIndex);
+      await this.storePageTranslation(sentence.pageNumber, existingCache.sentences);
+    } else {
+      await this.storePageTranslation(sentence.pageNumber, [sentence]);
+    }
+  }
+
   async getPageTranslation(pageNumber: number): Promise<PageTranslationCache | null> {
     const request = indexedDB.open('TranslationCache', 1);
     
@@ -177,7 +198,7 @@ class AtomicTranslationCache {
     });
   }
 
-  clearCache(): Promise<void> {
+  clear(): Promise<void> {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open('TranslationCache', 1);
       
@@ -202,6 +223,47 @@ class AtomicTranslationCache {
         clearRequest.onerror = () => {
           reject(new Error('Failed to clear store'));
         };
+      };
+    });
+  }
+
+  cleanupExpired(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const dbRequest = indexedDB.open('TranslationCache', 1);
+      
+      dbRequest.onerror = () => reject(new Error('Failed to open IndexedDB'));
+      
+      dbRequest.onsuccess = () => {
+        const db = dbRequest.result as IDBDatabase;
+        const transaction = db.transaction(['pageTranslations'], 'readwrite');
+        const store = transaction.objectStore('pageTranslations');
+        
+        transaction.onerror = () => {
+          reject(new Error('Transaction failed'));
+        };
+        
+        try {
+          const index = store.index('expiresAt');
+          const cursorRequest = index.openCursor(IDBKeyRange.upperBound(Date.now()));
+          
+          cursorRequest.onsuccess = (event: Event) => {
+            const cursor = (event.target as IDBRequest).result;
+            
+            if (cursor instanceof IDBCursorWithValue) {
+              cursor.delete();
+              cursor.continue();
+            } else {
+              resolve();
+            }
+          };
+          
+          cursorRequest.onerror = () => {
+            reject(new Error('Failed to cleanup expired entries'));
+          };
+        } catch (error) {
+          // Index might not exist, skip cleanup
+          resolve();
+        }
       };
     });
   }

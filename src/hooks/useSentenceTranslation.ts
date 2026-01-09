@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { translationQueue } from '@/utils/translationQueue';
-import { translationCache } from '@/utils/translationCache';
+import { atomicTranslationCache as translationCache } from '@/utils/atomicTranslationCache';
 import { pdfTextProcessor } from '@/utils/pdfTextProcessor';
 import type { SentenceTranslation } from '@/types/translation';
 

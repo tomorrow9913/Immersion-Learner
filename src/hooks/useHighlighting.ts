@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { SentenceTranslation } from '@/types/translation';
-import { pdfTextProcessor, type Coordinate } from '@/utils/pdfTextProcessor';
+import { pdfTextProcessor } from '@/utils/pdfTextProcessor';
+import type { Coordinate } from '@/utils/coordinateUtils';
 
 interface UseHighlightingProps {
   pdf: PDFDocumentProxy | null;
