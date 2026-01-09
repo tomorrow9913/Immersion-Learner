@@ -116,11 +116,16 @@ class TranslationQueue {
         status: 'completed'
       };
     } catch (error) {
+      const [pageNumberStr, sentenceIndexStr] = request.id.split('-').slice(0, 2);
+      const pageNumber = parseInt(pageNumberStr);
+      const sentenceIndex = parseInt(sentenceIndexStr);
+
       return {
         id: request.id,
         originalText: request.text,
-        pageNumber: 0,
-        sentenceIndex: 0,
+        translatedText: '',
+        pageNumber,
+        sentenceIndex,
         createdAt: Date.now(),
         expiresAt: Date.now() + FOUR_DAYS_MS,
         status: 'error',

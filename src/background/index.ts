@@ -92,7 +92,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         const { original, translated } = message;
         enqueueSave(original, translated);
         sendResponse({ success: true });
-      } else if (message.type === 'TRANSLATE_SENTENCE') {
+      } else if (message.type === MESSAGE_TYPES.TRANSLATE_SENTENCE) {
         const { text, targetLang = 'ko' } = message;
         const translatedText = await translateText(text, targetLang);
         sendResponse({ success: true, translatedText });
@@ -104,5 +104,5 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   };
 
   handleMessage();
-  return true;
+  return true; // 비동기 응답을 위해 true 반환
 });

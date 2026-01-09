@@ -14,6 +14,7 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
   const [translations, setTranslations] = useState<Map<number, SentenceTranslation[]>>(new Map());
   const [isTranslating, setIsTranslating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [failedPages, setFailedPages] = useState<Set<number>>(new Set());
 
   const extractSentencesFromPage = useCallback(async (pageNumber: number): Promise<string[]> => {
     if (!pdf) return [];
@@ -61,6 +62,11 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
     const cached = await translationCache.getPageTranslation(pageNumber);
     if (cached && cached.sentences.length > 0) {
       setTranslations(prev => new Map(prev).set(pageNumber, cached.sentences));
+      setFailedPages(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(pageNumber);
+        return newSet;
+      });
       return;
     }
 
@@ -86,12 +92,16 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
       const results = await Promise.all(translationPromises);
       
       setTranslations(prev => new Map(prev).set(pageNumber, results));
+      setFailedPages(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(pageNumber);
+        return newSet;
+      });
       
       await translationCache.storePageTranslation(pageNumber, results);
     } catch (err) {
       console.error(`페이지 ${pageNumber} 번역 실패:`, err);
-      const message = err instanceof Error ? err.message : String(err);
-      setError(message);
+      setFailedPages(prev => new Set(prev).add(pageNumber));
     } finally {
       setIsTranslating(false);
     }
@@ -121,30 +131,38 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
 
   useEffect(() => {
     if (pdf && currentPage > 0) {
-      if (!translations.has(currentPage)) {
+      if (!translations.has(currentPage) && !failedPages.has(currentPage)) {
         translatePageSentences(currentPage, 'high');
       }
       
       prefetchPages(currentPage);
     }
-  }, [pdf, currentPage, translatePageSentences, prefetchPages, translations]);
-
-  useEffect(() => {
-    translationCache.cleanupExpired();
-  }, []);
+  }, [pdf, currentPage, translatePageSentences, prefetchPages, translations, failedPages]);
 
   const clearCache = useCallback(() => {
     translationCache.clear();
     setTranslations(new Map());
+    setFailedPages(new Set());
   }, []);
+
+  const retryFailedPage = useCallback((pageNumber: number) => {
+    setFailedPages(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(pageNumber);
+      return newSet;
+    });
+    translatePageSentences(pageNumber, 'high');
+  }, [translatePageSentences]);
 
   return {
     translations,
     currentPageTranslations: translations.get(currentPage) || [],
     isTranslating,
     error,
+    failedPages,
     translatePageSentences,
     prioritizeCurrentPage,
     clearCache,
+    retryFailedPage,
   };
 };
