@@ -1,8 +1,17 @@
-import type { SentenceTranslation, PageTranslationCache } from '@/types/translation';
+import type { SentenceTranslation } from '@/types/translation';
 
 const DB_NAME = 'TranslationCache';
 const DB_VERSION = 1;
 const STORE_NAME = 'pageTranslations';
+
+interface PageTranslationCache {
+  pageNumber: number;
+  sentences: SentenceTranslation[];
+  pageTranslation?: string;
+  createdAt: number;
+  expiresAt: number;
+  version: number;
+}
 
 class TranslationCacheDB {
   private db: IDBDatabase | null = null;
@@ -16,34 +25,6 @@ class TranslationCacheDB {
         this.db = request.result;
         resolve();
       };
-
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          const store = db.createObjectStore(STORE_NAME, { keyPath: 'pageNumber' });
-          store.createIndex('expiresAt', 'expiresAt', { unique: false });
-        }
-      };
-    });
-  }
-
-  async storePageTranslation(pageNumber: number, sentences: SentenceTranslation[]): Promise<void> {
-    if (!this.db) await this.init();
-
-    const cache: PageTranslationCache = {
-      pageNumber,
-      sentences,
-      createdAt: Date.now(),
-      expiresAt: Date.now() + (4 * 24 * 60 * 60 * 1000)
-    };
-
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([STORE_NAME], 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      
-      const request = store.put(cache);
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve();
     });
   }
 
@@ -54,8 +35,14 @@ class TranslationCacheDB {
       const transaction = this.db!.transaction([STORE_NAME], 'readonly');
       const store = transaction.objectStore(STORE_NAME);
       
+      transaction.onerror = () => {
+        reject(new Error('Transaction failed'));
+      };
+      
       const request = store.get(pageNumber);
-      request.onerror = () => reject(request.error);
+      request.onerror = () => {
+        reject(request.error);
+      };
       request.onsuccess = () => {
         const result = request.result;
         if (!result) {
@@ -64,12 +51,42 @@ class TranslationCacheDB {
         }
 
         if (result.expiresAt < Date.now()) {
-          this.deletePageTranslation(pageNumber);
-          resolve(null);
+          this.deletePageTranslation(pageNumber).then(() => {
+            resolve(null);
+          });
           return;
         }
 
         resolve(result);
+      };
+    });
+  }
+
+  async storePageTranslation(pageNumber: number, sentences: SentenceTranslation[]): Promise<void> {
+    if (!this.db) await this.init();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      
+      transaction.onerror = () => {
+        reject(new Error('Transaction failed'));
+      };
+      
+      const cache: PageTranslationCache = {
+        pageNumber,
+        sentences,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + (4 * 24 * 60 * 60 * 1000),
+        version: 0
+      };
+
+      const request = store.put(cache);
+      request.onerror = () => {
+        reject(new Error('Failed to update cache'));
+      };
+      request.onsuccess = () => {
+        resolve();
       };
     });
   }
@@ -84,8 +101,10 @@ class TranslationCacheDB {
       
       if (existingSentenceIndex >= 0) {
         existingCache.sentences[existingSentenceIndex] = sentence;
+        existingCache.version = (existingCache.version || 0) + 1;
       } else {
         existingCache.sentences.push(sentence);
+        existingCache.version = 1;
       }
       
       existingCache.sentences.sort((a, b) => a.sentenceIndex - b.sentenceIndex);
@@ -102,9 +121,17 @@ class TranslationCacheDB {
       const transaction = this.db!.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
       
+      transaction.onerror = () => {
+        reject(new Error('Transaction failed'));
+      };
+      
       const request = store.delete(pageNumber);
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve();
+      request.onerror = () => {
+        reject(new Error('Failed to delete cache'));
+      };
+      request.onsuccess = () => {
+        resolve();
+      };
     });
   }
 
@@ -114,15 +141,29 @@ class TranslationCacheDB {
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      const index = store.index('expiresAt');
       
+      transaction.onerror = () => {
+        reject(new Error('Transaction failed'));
+      };
+      
+      const index = store.index('expiresAt');
       const request = index.openCursor(IDBKeyRange.upperBound(Date.now()));
-      request.onerror = () => reject(request.error);
+      
+      request.onerror = () => {
+        reject(new Error('Transaction failed'));
+      };
       request.onsuccess = (event) => {
         const cursor = (event.target as IDBRequest).result;
-        if (cursor) {
-          cursor.delete();
-          cursor.continue();
+        
+        if (cursor instanceof IDBCursorWithValue) {
+          const cache = cursor.value as PageTranslationCache;
+          
+          if (cache.expiresAt < Date.now()) {
+            cursor.delete();
+            cursor.continue();
+          } else {
+            cursor.continue();
+          }
         } else {
           resolve();
         }
@@ -137,9 +178,17 @@ class TranslationCacheDB {
       const transaction = this.db!.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
       
+      transaction.onerror = () => {
+        reject(new Error('Transaction failed'));
+      };
+      
       const request = store.clear();
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve();
+      request.onerror = () => {
+        reject(new Error('Failed to clear cache'));
+      };
+      request.onsuccess = () => {
+        resolve();
+      };
     });
   }
 }
