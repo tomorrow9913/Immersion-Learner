@@ -8,9 +8,10 @@ import type { SentenceTranslation } from '@/types/translation';
 interface UseSentenceTranslationProps {
   pdf: PDFDocumentProxy | null;
   currentPage: number;
+  currentPageRef?: React.MutableRefObject<number>;
 }
 
-export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslationProps) => {
+export const useSentenceTranslation = ({ pdf, currentPage, currentPageRef }: UseSentenceTranslationProps) => {
   const [translations, setTranslations] = useState<Map<number, SentenceTranslation[]>>(new Map());
   const [isTranslating, setIsTranslating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,9 +125,11 @@ const translatePageSentences = useCallback(async (pageNumber: number, priority: 
       const isPageContextValid = () => {
         if (!pdf) return false;
         
-        const isTargetPageStillRelevant = currentPage === pageNumber || 
-                                         currentPage === pageNumber - 1 || 
-                                         currentPage === pageNumber + 1;
+        // Use ref to get the latest currentPage value to avoid closure issues
+        const latestCurrentPage = currentPageRef?.current || currentPage;
+        const isTargetPageStillRelevant = latestCurrentPage === pageNumber || 
+                                         latestCurrentPage === pageNumber - 1 || 
+                                         latestCurrentPage === pageNumber + 1;
         
         return isTargetPageStillRelevant;
       };

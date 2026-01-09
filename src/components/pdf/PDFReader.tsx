@@ -29,6 +29,11 @@ const PDFReader = () => {
     const [pageNumber, setPageNumber] = useState(1);
     const [outline, setOutline] = useState<OutlineItem[]>([]);
     const [hoveredSentenceId, setHoveredSentenceId] = useState<string | null>(null);
+    const currentPageRef = useRef<number>(pageNumber);
+
+    useEffect(() => {
+        currentPageRef.current = pageNumber;
+    }, [pageNumber]);
 
     
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -84,7 +89,8 @@ const PDFReader = () => {
         failedPages
     } = useSentenceTranslation({ 
         pdf: pdfDocument, 
-        currentPage: pageNumber 
+        currentPage: pageNumber,
+        currentPageRef: currentPageRef
     });
 
     const {
