@@ -1,4 +1,6 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { buildSpatialIndex, findSentenceAtPoint } from '@/utils/textUtils';
+import type { SpatialIndex } from '@/utils/textUtils';
 
 interface TextCoordinate {
   x: number;
@@ -33,40 +35,80 @@ const HighlightingLayer: React.FC<HighlightingLayerProps> = ({
   className = ''
 }) => {
   const [hoveredSentenceId, setHoveredSentenceId] = useState<string | null>(null);
+  const [spatialIndex, setSpatialIndex] = useState<SpatialIndex | null>(null);
   const layerRef = useRef<HTMLDivElement>(null);
+  const throttledUpdateRef = useRef<number | null>(null);
 
   const activeSentenceId = highlightedSentenceId || hoveredSentenceId;
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!layerRef.current) return;
+  // Convert HighlightedSentence[] to Sentence[] for spatial indexing
+  const convertToSpatialSentences = useCallback(() => {
+    return sentences.map(sentence => ({
+      id: parseInt(sentence.id),
+      text: sentence.text,
+      rects: sentence.coordinates.map(coord => ({
+        x: coord.x,
+        y: coord.y,
+        width: coord.width,
+        height: coord.height
+      })),
+      yBin: Math.floor((sentence.coordinates[0]?.y || 0) / 50)
+    }));
+  }, [sentences]);
 
-    const rect = layerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const hoveredSentence = sentences.find(sentence => {
-      return sentence.coordinates.some(coord => {
-        const scaledX = coord.x * scale;
-        const scaledY = coord.y * scale;
-        const scaledWidth = coord.width * scale;
-        const scaledHeight = coord.height * scale;
-
-        return x >= scaledX && x <= scaledX + scaledWidth &&
-               y >= scaledY && y <= scaledY + scaledHeight;
-      });
-    });
-
-    const newHoveredId = hoveredSentence?.id || null;
-    if (newHoveredId !== hoveredSentenceId) {
-      setHoveredSentenceId(newHoveredId);
-      onSentenceHover?.(newHoveredId);
+  // Build spatial index when sentences change
+  useEffect(() => {
+    if (sentences.length > 0) {
+      const spatialSentences = convertToSpatialSentences();
+      const index = buildSpatialIndex(spatialSentences);
+      setSpatialIndex(index);
+    } else {
+      setSpatialIndex(null);
     }
+  }, [sentences, convertToSpatialSentences]);
+
+  // Throttled mouse move handler
+  const throttledHandleMouseMove = useCallback((clientX: number, clientY: number) => {
+    if (throttledUpdateRef.current) {
+      return;
+    }
+
+    throttledUpdateRef.current = requestAnimationFrame(() => {
+      throttledUpdateRef.current = null;
+      
+      if (!layerRef.current || !spatialIndex) return;
+
+      const rect = layerRef.current.getBoundingClientRect();
+      const x = (clientX - rect.left) / scale;
+      const y = (clientY - rect.top) / scale;
+
+      const sentence = findSentenceAtPoint({ x, y }, spatialIndex);
+      const newHoveredId = sentence ? sentence.id.toString() : null;
+      
+      if (newHoveredId !== hoveredSentenceId) {
+        setHoveredSentenceId(newHoveredId);
+        onSentenceHover?.(newHoveredId);
+      }
+    });
+  }, [scale, spatialIndex, hoveredSentenceId, onSentenceHover]);
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    throttledHandleMouseMove(e.clientX, e.clientY);
   };
 
   const handleMouseLeave = () => {
     setHoveredSentenceId(null);
     onSentenceHover?.(null);
   };
+
+  // Cleanup throttling on unmount
+  useEffect(() => {
+    return () => {
+      if (throttledUpdateRef.current) {
+        cancelAnimationFrame(throttledUpdateRef.current);
+      }
+    };
+  }, []);
 
   const renderHighlights = () => {
     const pageSentences = sentences.filter(s => s.pageNumber === pageNumber);
