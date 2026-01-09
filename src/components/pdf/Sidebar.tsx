@@ -15,15 +15,18 @@ interface SidebarProps {
   translations: SentenceTranslation[];
   isTranslating: boolean;
   error?: string | null;
+  activeSentenceId?: string | null;
+  onHoverCard?: (sentenceId: string | null) => void;
 }
 
 interface TranslationTabProps {
   translations: SentenceTranslation[];
   isTranslating: boolean;
   error?: string | null;
+  activeSentenceId?: string | null;
 }
 
-const TranslationTab: React.FC<TranslationTabProps> = ({ translations, isTranslating, error }) => {
+const TranslationTab: React.FC<TranslationTabProps> = ({ translations, isTranslating, error, activeSentenceId }) => {
   if (isTranslating && translations.length === 0) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -67,7 +70,7 @@ const TranslationTab: React.FC<TranslationTabProps> = ({ translations, isTransla
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-sm text-gray-800 leading-relaxed">
+              <p className={`text-sm text-gray-800 leading-relaxed ${activeSentenceId === sentence.id ? 'bg-yellow-100 border border-yellow-300 rounded p-2' : ''}`}>
                 {sentence.originalText}
               </p>
               {sentence.translatedText && (

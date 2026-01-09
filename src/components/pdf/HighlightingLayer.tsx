@@ -39,7 +39,7 @@ const HighlightingLayer: React.FC<HighlightingLayerProps> = ({
   const layerRef = useRef<HTMLDivElement>(null);
   const throttledUpdateRef = useRef<number | null>(null);
 
-  const activeSentenceId = highlightedSentenceId || hoveredSentenceId;
+  const activeSentenceId = highlightedSentenceId; // 부모로부터 받은 상태 우선
 
   // Convert HighlightedSentence[] to Sentence[] for spatial indexing
   const convertToSpatialSentences = useCallback(() => {

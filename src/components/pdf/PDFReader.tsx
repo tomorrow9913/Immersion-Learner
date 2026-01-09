@@ -28,6 +28,7 @@ const PDFReader = () => {
     const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
     const [pageNumber, setPageNumber] = useState(1);
     const [outline, setOutline] = useState<OutlineItem[]>([]);
+    const [hoveredSentenceId, setHoveredSentenceId] = useState<string | null>(null);
 
     
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -301,6 +302,8 @@ const PDFReader = () => {
                         translations={currentPageTranslations}
                         isTranslating={isTranslating}
                         error={error}
+                        activeSentenceId={hoveredSentenceId}
+                        onHoverCard={setHoveredSentenceId}
                     />
                     
                     <div className="flex-1 flex flex-col min-h-0 w-0">

@@ -23,7 +23,11 @@ export class PDFCoordinateMapper {
   private sentenceCounter: number = 1;
 
   constructor(options: CoordinateMappingOptions) {
-    this.options = options;
+    this.options = {
+      pageScale: options.pageScale,
+      pageOffset: { x: 0, y: 0 }, // PDF 좌표계는 좌하단이 (0,0) 기준
+      containerElement: options.containerElement
+    };
   }
 
   extractSentencePositions(
@@ -91,9 +95,9 @@ export class PDFCoordinateMapper {
     const scaledY = pdfPosition.y * this.options.pageScale;
     const scaledWidth = pdfPosition.width * this.options.pageScale;
     const scaledHeight = pdfPosition.height * this.options.pageScale;
-
-    const screenX = this.options.pageOffset.x + scaledX;
-    const screenY = this.options.pageOffset.y + scaledY;
+    
+    const screenX = scaledX; // PDF 좌표는 이미 페이지 내부 기준
+    const screenY = scaledY; // HighlightingLayer는 PDF 페이지 div 내부에 있으므로 offset 불필요
 
     return {
       left: screenX,
