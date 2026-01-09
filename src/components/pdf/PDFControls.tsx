@@ -8,13 +8,21 @@ interface PDFControlsProps {
   numPages: number;
   onPageChange: (newPage: number) => void;
   onFileSelect: (file: File) => void;
+  isTranslating?: boolean;
+  translationError?: string | null;
+  isTranslationFailed?: boolean;
+  onRetryTranslation?: () => void;
 }
 
 const PDFControls: React.FC<PDFControlsProps> = ({
   pageNumber,
   numPages,
   onPageChange,
-  onFileSelect
+  onFileSelect,
+  isTranslating = false,
+  translationError = null,
+  isTranslationFailed = false,
+  onRetryTranslation
 }) => {
   const handleFileInputClick = () => {
     const input = document.getElementById('controls-file-input') as HTMLInputElement;
@@ -101,6 +109,28 @@ const PDFControls: React.FC<PDFControlsProps> = ({
                 Next
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
+              
+              {/* 번역 상태 및 재시도 버튼 */}
+              {isTranslationFailed && (
+                <div className="ml-4 flex flex-col gap-2">
+                  <span className="text-xs text-red-600 font-medium">번역 실패</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onRetryTranslation}
+                    disabled={isTranslating}
+                  >
+                    {isTranslating ? '번역 중...' : '다시 시도'}
+                  </Button>
+                </div>
+              )}
+              
+              {translationError && (
+                <div className="ml-4 flex items-center">
+                  <span className="text-xs text-red-600 font-medium mr-2">에러</span>
+                  <span className="text-xs text-gray-600">{translationError}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

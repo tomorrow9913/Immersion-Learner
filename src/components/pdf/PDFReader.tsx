@@ -80,7 +80,8 @@ const PDFReader = () => {
         currentPageTranslations,
         isTranslating,
         error,
-        translatePageSentences
+        translatePageSentences,
+        failedPages
     } = useSentenceTranslation({ 
         pdf: pdfDocument, 
         currentPage: pageNumber 
@@ -449,6 +450,10 @@ const PDFReader = () => {
                                     numPages={numPages}
                                     onPageChange={handlePageChange}
                                     onFileSelect={handleNewFileSelect}
+                                    isTranslating={isTranslating}
+                                    translationError={error}
+                                    isTranslationFailed={failedPages.has(pageNumber)}
+                                    onRetryTranslation={() => translatePageSentences(pageNumber, 'high')}
                                 />
                             </div>
                         </div>

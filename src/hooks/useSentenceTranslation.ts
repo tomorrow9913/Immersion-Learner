@@ -151,6 +151,20 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
     }
   }, [pdf, currentPage, translatePageSentences, prefetchPages, translations, failedPages]);
 
+  // [디버깅] 현재 상태 로깅
+  useEffect(() => {
+    console.log('🔍 Translation Debug:', {
+      currentPage,
+      hasTranslation: translations.has(currentPage),
+      isFailed: failedPages.has(currentPage),
+      isPending: pendingPages.current.has(currentPage),
+      translationsCount: translations.size,
+      failedPagesCount: failedPages.size,
+      pendingCount: pendingPages.current.size,
+      currentPageTranslations: translations.get(currentPage)
+    });
+  }, [currentPage, translations, failedPages]);
+
   return {
     translations,
     currentPageTranslations: translations.get(currentPage) || [],
@@ -159,6 +173,7 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
     failedPages,
     translatePageSentences,
     retryFailedPage: useCallback((pageNumber: number) => {
+      console.log('🔄 Manual retry requested for page:', pageNumber);
       setFailedPages(prev => {
         const newSet = new Set(prev);
         newSet.delete(pageNumber);

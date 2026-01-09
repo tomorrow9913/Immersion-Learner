@@ -67,12 +67,26 @@ export async function translateText(text: string, targetLang = 'ko'): Promise<st
 
     const data = JSON.parse(rawData);
 
+    // [디버깅] API 응답 형태 상세 로깅
+    console.log('Google Translate API Response:', {
+      isArray: Array.isArray(data),
+      length: data?.length,
+      firstElement: data?.[0],
+      firstElementType: data?.[0]?.constructor?.name
+    });
+
     // [수정 3] 파싱 로직 변경
     if (isGoogleTranslateResponse(data)) {
       const translatedText = data[0]
         .map((item) => (Array.isArray(item) ? item[0] : ''))
         .filter(Boolean)
         .join('');
+
+      console.log('Translation result:', {
+        originalText: text,
+        translatedText,
+        isEmpty: !translatedText.trim()
+      });
 
       if (!translatedText.trim()) {
         throw new Error('번역 결과가 비어있습니다.');
