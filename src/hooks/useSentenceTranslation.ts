@@ -18,9 +18,9 @@ export const useSentenceTranslation = ({ pdf, currentPage, currentPageRef }: Use
   const [translationProgress, setTranslationProgress] = useState<{ currentPage: number; processed: number; total: number } | null>(null);
   // failedPages State가 반드시 있어야 합니다: const [failedPages, setFailedPages] = useState<Set<number>>(new Set());
   const [failedPages, setFailedPages] = useState<Set<number>>(new Set());
-  
+
   const pendingPages = useRef<Set<number>>(new Set());
-  
+
   const previousPageRef = useRef<number>(0);
   const justRevisitedRef = useRef<boolean>(false);
 
@@ -45,7 +45,7 @@ export const useSentenceTranslation = ({ pdf, currentPage, currentPageRef }: Use
 
       const page = await pdf.getPage(pageNumber);
       const textContent = await page.getTextContent();
-      
+
 
       const fragments = textContent.items.map((item: any) => ({
         text: item.str || '',
@@ -74,13 +74,13 @@ export const useSentenceTranslation = ({ pdf, currentPage, currentPageRef }: Use
     }
   }, [pdf]);
 
-const translatePageSentences = useCallback(async (pageNumber: number, priority: 'high' | 'normal' | 'low' = 'normal') => {
+  const translatePageSentences = useCallback(async (pageNumber: number, priority: 'high' | 'normal' | 'low' = 'normal') => {
     if (!pdf || !docId) return;
 
     // Skip if already processing, already translated, or failed (unless just revisited)
-    if (pendingPages.current.has(pageNumber) || 
-        translations.has(pageNumber) || 
-        (failedPages.has(pageNumber) && !justRevisitedRef.current)) {
+    if (pendingPages.current.has(pageNumber) ||
+      translations.has(pageNumber) ||
+      (failedPages.has(pageNumber) && !justRevisitedRef.current)) {
       return;
     }
 
@@ -91,7 +91,7 @@ const translatePageSentences = useCallback(async (pageNumber: number, priority: 
     }
 
     pendingPages.current.add(pageNumber);
-    
+
     if (priority === 'high') {
       setIsTranslating(true);
       setError(null);
@@ -106,36 +106,35 @@ const translatePageSentences = useCallback(async (pageNumber: number, priority: 
 
       const BATCH_SIZE = 5;
       const results: SentenceTranslation[] = [];
-      
+
       setTranslationProgress({
         currentPage: pageNumber,
         processed: 0,
         total: sentences.length
       });
-      
+
       const isPageContextValid = () => {
         if (!pdf) return false;
-        
+
         // Use ref to get the latest currentPage value to avoid closure issues
         const latestCurrentPage = currentPageRef?.current || currentPage;
-        const isTargetPageStillRelevant = latestCurrentPage === pageNumber || 
-                                         latestCurrentPage === pageNumber - 1 || 
-                                         latestCurrentPage === pageNumber + 1;
-        
+        const isTargetPageStillRelevant = latestCurrentPage === pageNumber ||
+          latestCurrentPage === pageNumber - 1 ||
+          latestCurrentPage === pageNumber + 1;
+
         return isTargetPageStillRelevant;
       };
 
       for (let i = 0; i < sentences.length; i += BATCH_SIZE) {
         if (!isPageContextValid()) {
-          console.log(`Page context changed, aborting translation for page ${pageNumber}`);
           setTranslationProgress(null);
           return;
         }
 
         const batch = sentences.slice(i, i + BATCH_SIZE);
         const batchStartIndex = i;
-        
-        const batchPromises = batch.map((sentence, batchIndex) => 
+
+        const batchPromises = batch.map((sentence, batchIndex) =>
           translationQueue.addToQueue(
             sentence,
             pageNumber,
@@ -158,12 +157,12 @@ const translatePageSentences = useCallback(async (pageNumber: number, priority: 
           const newMap = new Map(prev);
           const existingResults = newMap.get(pageNumber) || [];
           const updatedResults = [...existingResults];
-          
+
           batchResults.forEach((result, batchIndex) => {
             const globalIndex = batchStartIndex + batchIndex;
             updatedResults[globalIndex] = result;
           });
-          
+
           return newMap.set(pageNumber, updatedResults);
         });
 
@@ -171,18 +170,18 @@ const translatePageSentences = useCallback(async (pageNumber: number, priority: 
           await new Promise(resolve => setTimeout(resolve, 50));
         }
       }
-      
+
       setTranslationProgress(null);
-      
+
       const validResults = results.filter(r => r.status === 'completed');
       if (validResults.length > 0) {
         setTranslations(prev => new Map(prev).set(pageNumber, validResults));
         await translationCache.storeSentences(validResults);
       }
-     } catch (err) {
+    } catch (err) {
       console.error(`페이지 ${pageNumber} 번역 실패:`, err);
       setFailedPages(prev => new Set(prev).add(pageNumber));
-      
+
       if (priority === 'high') setError(err instanceof Error ? err.message : String(err));
     } finally {
       pendingPages.current.delete(pageNumber);
@@ -219,7 +218,6 @@ const translatePageSentences = useCallback(async (pageNumber: number, priority: 
 
       // Start translation if not already cached
       if (!translations.has(currentPage)) {
-        console.log('📄 No translation found, starting translation for page:', currentPage);
         translatePageSentences(currentPage, 'high');
       }
 
@@ -241,20 +239,9 @@ const translatePageSentences = useCallback(async (pageNumber: number, priority: 
     }
   }, [pdf, currentPage, translatePageSentences, prefetchPages, translations, failedPages]);
 
-  useEffect(() => {
-    console.log('🔍 Translation Debug:', {
-      currentPage,
-      hasTranslation: translations.has(currentPage),
-      isFailed: failedPages.has(currentPage),
-      isPending: pendingPages.current.has(currentPage),
-      translationsCount: translations.size,
-      failedPagesCount: failedPages.size,
-      pendingCount: pendingPages.current.size,
-      currentPageTranslations: translations.get(currentPage)
-    });
-  }, [currentPage, translations, failedPages]);
+  useEffect(() => { }, [currentPage, translations, failedPages]);
 
-return {
+  return {
     translations,
     currentPageTranslations: translations.get(currentPage) || [],
     isTranslating,

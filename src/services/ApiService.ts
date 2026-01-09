@@ -1,8 +1,8 @@
 import { fetchWithRetry } from '@/utils/retry';
 
 type GoogleTranslateSentence = [
-  string, 
-  string, 
+  string,
+  string,
   ...unknown[]
 ];
 
@@ -47,7 +47,7 @@ function isGoogleTranslateResponse(data: unknown): data is GoogleTranslateRespon
     Array.isArray(data) &&
     data.length > 0 &&
     Array.isArray(data[0]) &&
-    data[0].every((item): item is GoogleTranslateSentence => 
+    data[0].every((item): item is GoogleTranslateSentence =>
       isGoogleTranslateSentence(item)
     )
   );
@@ -98,21 +98,6 @@ export async function translateText(text: string, targetLang = 'ko'): Promise<st
     } catch (parseError) {
       console.error('JSON parse error:', parseError);
       throw new Error('번역 서비스 응답 파싱에 실패했습니다.');
-    }
-
-    // [디버깅] API 응답 형태 상세 로깅
-    if (isGoogleTranslateResponse(data)) {
-      console.log('Google Translate API Response:', {
-        isArray: true,
-        length: data.length,
-        firstElement: data[0],
-        isValidResponse: true
-      });
-    } else {
-      console.log('Google Translate API Response:', {
-        isArray: Array.isArray(data),
-        isValidResponse: false
-      });
     }
 
     // [수정 3] 파싱 로직 변경

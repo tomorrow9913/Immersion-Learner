@@ -108,9 +108,9 @@ export const usePDFStorage = () => {
       try {
         let fileName: string;
         let fileSize: number;
-        
+
         if (typeof file === 'string') {
-          return; 
+          return;
         } else if (file instanceof File) {
           fileName = file.name;
           fileSize = file.size;
@@ -120,10 +120,10 @@ export const usePDFStorage = () => {
 
         const result = await chrome.storage.local.get(['recentFiles']);
         const currentFiles = (result.recentFiles as RecentFile[]) || [];
-        
+
         const existingIndex = currentFiles.findIndex(f => f.name === fileName);
         let fileId = existingIndex !== -1 ? currentFiles[existingIndex].id : Date.now().toString() + Math.random().toString(36).substr(2, 9);
-        
+
         if (existingIndex !== -1) {
           currentFiles.splice(existingIndex, 1);
         }
@@ -139,10 +139,10 @@ export const usePDFStorage = () => {
         };
 
         recentFiles.actions.addRecentFile(recentFile);
-        
+
         const newFilesForStorage = [recentFile, ...currentFiles].slice(0, 5);
         await chrome.storage.local.set({ recentFiles: newFilesForStorage });
-        
+
       } catch (error) {
         console.error('Failed to save recent file:', error);
         alert('최근 파일 저장 실패: ' + (error instanceof Error ? error.message : String(error)));
@@ -153,22 +153,20 @@ export const usePDFStorage = () => {
   const openRecentFile = useCallback(async (recentFile: RecentFile): Promise<File | string | Blob | null> => {
     try {
       console.log('Opening recent file:', recentFile.name);
-      
+
       let fileBlob = await fileCRUD.actions.getFile(recentFile.id);
-      
+
       if (fileBlob) {
-        console.log('Loaded from IndexedDB');
-        
         const updatedRecentFile = { ...recentFile, lastAccessed: Date.now() };
         recentFiles.actions.updateRecentFile(updatedRecentFile);
-        
+
         const result = await chrome.storage.local.get(['recentFiles']);
         const files = (result.recentFiles as RecentFile[]) || [];
         const otherFiles = files.filter(f => f.id !== recentFile.id);
         const newFilesForStorage = [updatedRecentFile, ...otherFiles];
-        
+
         await chrome.storage.local.set({ recentFiles: newFilesForStorage });
-        
+
         return fileBlob;
       } else if (recentFile.dataUrl) {
         console.log('Loaded from legacy dataUrl');
@@ -207,17 +205,17 @@ export const usePDFStorage = () => {
       try {
         const result = await chrome.storage.local.get(['recentFiles']);
         const files: RecentFile[] = (result.recentFiles as RecentFile[]) || [];
-        const fileName = file instanceof File ? file.name : undefined; 
-        
+        const fileName = file instanceof File ? file.name : undefined;
+
         if (fileName) {
           const fileIndex = files.findIndex(f => f.name === fileName);
           if (fileIndex !== -1) {
             const currentFile = files[fileIndex];
             const updatedFile = { ...currentFile, lastPage: pageNumber, lastAccessed: Date.now() };
-            
+
             files.splice(fileIndex, 1);
             const newFilesForStorage = [updatedFile, ...files];
-            
+
             recentFiles.actions.updateRecentFile(updatedFile);
             await chrome.storage.local.set({ recentFiles: newFilesForStorage });
           }

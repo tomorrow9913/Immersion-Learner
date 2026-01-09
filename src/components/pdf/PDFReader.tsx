@@ -22,7 +22,7 @@ import alertService from '@/services/AlertService';
 
 const PDFReader = () => {
     pdfjs.GlobalWorkerOptions.workerSrc = PDF_CONFIG.WORKER_SRC;
-    
+
     const [file, setFile] = useState<File | string | Blob | null>(null);
     const [numPages, setNumPages] = useState<number>(0);
     const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
@@ -35,10 +35,10 @@ const PDFReader = () => {
         currentPageRef.current = pageNumber;
     }, [pageNumber]);
 
-    
+
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isDragOver, setIsDragOver] = useState(false);
-    
+
     const scrollRef1 = useRef<HTMLDivElement>(null);
 
 
@@ -87,8 +87,8 @@ const PDFReader = () => {
         error,
         translatePageSentences,
         failedPages
-    } = useSentenceTranslation({ 
-        pdf: pdfDocument, 
+    } = useSentenceTranslation({
+        pdf: pdfDocument,
         currentPage: pageNumber,
         currentPageRef: currentPageRef
     });
@@ -102,17 +102,17 @@ const PDFReader = () => {
         currentPage: pageNumber,
         translations: currentPageTranslations,
         scale: PDF_CONFIG.SCALE,
-        onSentenceHover: () => {}
+        onSentenceHover: () => { }
     });
 
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         const pdfUrl = urlParams.get('pdf');
-        
+
         if (pdfUrl) {
             console.log('PDF URL parameter detected:', pdfUrl);
         }
-        
+
         loadRecentFiles();
     }, []);
 
@@ -121,7 +121,7 @@ const PDFReader = () => {
     useEffect(() => {
         if (textSelection.text) {
             translateText(textSelection.text).catch((error) => {
-                if (error.message?.includes('Extension context invalidated') || 
+                if (error.message?.includes('Extension context invalidated') ||
                     error.message?.includes('확장 프로그램이 업데이트되었습니다')) {
                     addAlert('확장 프로그램이 업데이트되었습니다. 페이지를 새로고침 해주세요.', 'destructive');
                 } else {
@@ -138,7 +138,6 @@ const PDFReader = () => {
     }, [pdfDocument, pageNumber, translatePageSentences]);
 
     const handleDocumentLoadSuccess = (pdf: PDFDocumentProxy) => {
-        console.log('PDF loaded successfully, pages:', pdf.numPages);
         setNumPages(pdf.numPages);
         setPdfDocument(pdf);
         extractOutlineDirectly(pdf).then(setOutline);
@@ -146,11 +145,11 @@ const PDFReader = () => {
 
 
 
-    const handlePageChange = (newPage: number) => { 
-        if (!isNaN(newPage) && newPage >= 1 && newPage <= numPages) { 
+    const handlePageChange = (newPage: number) => {
+        if (!isNaN(newPage) && newPage >= 1 && newPage <= numPages) {
             setPageNumber(newPage);
             updateLastPage(file, newPage);
-        } 
+        }
     };
 
 
@@ -164,7 +163,7 @@ const PDFReader = () => {
 
     const handleOutlineClick = async (dest: any, _title: string, pageNumber?: number) => {
         let targetPage: number | undefined;
-        
+
         if (pageNumber) {
             targetPage = pageNumber;
         } else if (dest && typeof dest === 'object' && dest.num !== undefined) {
@@ -208,13 +207,13 @@ const PDFReader = () => {
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         setIsDragOver(false);
-        
+
         const files = e.dataTransfer.files;
         if (files && files[0] && files[0].type === 'application/pdf') {
             const selectedFile = files[0];
             setFile(selectedFile);
             saveRecentFile(selectedFile, 1);
-            
+
             setPageNumber(1);
             resetTranslation();
             clearSelection();
@@ -228,7 +227,7 @@ const PDFReader = () => {
             const selectedFile = files[0];
             setFile(selectedFile);
             saveRecentFile(selectedFile, 1);
-            
+
             setPageNumber(1);
             resetTranslation();
             clearSelection();
@@ -247,7 +246,7 @@ const PDFReader = () => {
     const handleNewFileSelect = (file: File) => {
         setFile(file);
         saveRecentFile(file, 1);
-        
+
         setPageNumber(1);
         resetTranslation();
         clearSelection();
@@ -265,11 +264,11 @@ const PDFReader = () => {
 
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden w-full">
-            <MultiStackAlert 
+            <MultiStackAlert
                 alerts={alerts}
                 onClearAlert={clearAlert}
             />
-            
+
             {popupPosition && (
                 <TranslationPopup
                     position={popupPosition}
@@ -283,7 +282,7 @@ const PDFReader = () => {
                     onReloadPage={handlePageReload}
                 />
             )}
-            
+
             {!file ? (
                 <FileDropArea
                     isDragOver={isDragOver}
@@ -312,7 +311,7 @@ const PDFReader = () => {
                         activeSentenceId={hoveredSentenceId}
                         onHoverCard={setHoveredSentenceId}
                     />
-                    
+
                     <div className="flex-1 flex flex-col min-h-0 w-0">
                         {!isSidebarOpen && outline.length > 0 && (
                             <div className="bg-white shadow-sm border-b border-gray-200 p-4 flex-shrink-0">
@@ -334,15 +333,15 @@ const PDFReader = () => {
                         )}
 
                         <div className="flex-1 flex flex-col min-h-0">
-                            <div className="flex-1 overflow-auto bg-gray-50 p-4" 
-                                 ref={scrollRef1}>
+                            <div className="flex-1 overflow-auto bg-gray-50 p-4"
+                                ref={scrollRef1}>
                                 <div className="bg-white shadow-lg border border-gray-200 rounded-lg flex justify-center min-h-[600px] relative">
                                     <div className="flex w-full min-h-full">
                                         <div className="w-1/2 min-w-0">
                                             <div className="flex justify-center h-full p-4 pr-2">
                                                 <div className="flex flex-col items-center relative">
                                                     {highlightedSentenceId && (
-                                                        <div 
+                                                        <div
                                                             className="absolute top-0 left-0 w-full h-full pointer-events-none"
                                                             style={{ zIndex: 15 }}
                                                         >
@@ -363,9 +362,9 @@ const PDFReader = () => {
                                                         loading={<div className="text-gray-500 animate-pulse">Loading PDF...</div>}
                                                         error={<div className="text-red-500">Failed to load PDF.</div>}
                                                     >
-                                                        <Page 
-                                                            pageNumber={pageNumber} 
-                                                            renderTextLayer={true} 
+                                                        <Page
+                                                            pageNumber={pageNumber}
+                                                            renderTextLayer={true}
                                                             renderAnnotationLayer={true}
                                                             scale={PDF_CONFIG.SCALE}
                                                             className="max-w-full"
@@ -390,14 +389,14 @@ const PDFReader = () => {
                                                         </div>
                                                     </div>
                                                 </div>
-                                                
+
                                                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
                                                     {error && (
                                                         <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                                                             <p className="text-sm text-red-600">{error}</p>
                                                         </div>
                                                     )}
-                                                    
+
                                                     {isTranslating && currentPageTranslations.length === 0 ? (
                                                         <div className="flex items-center justify-center h-32">
                                                             <div className="flex flex-col items-center text-gray-500">
@@ -411,8 +410,8 @@ const PDFReader = () => {
                                                         </div>
                                                     ) : (
                                                         currentPageTranslations.map((sentence) => (
-                                                            <div 
-                                                                key={sentence.id} 
+                                                            <div
+                                                                key={sentence.id}
                                                                 className="border-b border-gray-100 pb-3 last:border-b-0"
                                                                 onMouseEnter={() => handleTranslationHover(sentence.id)}
                                                                 onMouseLeave={() => handleTranslationHover(null)}
@@ -449,7 +448,7 @@ const PDFReader = () => {
                                     <div className="absolute left-1/2 top-0 bottom-0 w-1 bg-gray-300 shadow-lg z-8 transform -translate-x-1/2"></div>
                                 </div>
                             </div>
-                            
+
                             <div className="flex-shrink-0 border-t border-gray-200 bg-white">
                                 <PDFControls
                                     pageNumber={pageNumber}
