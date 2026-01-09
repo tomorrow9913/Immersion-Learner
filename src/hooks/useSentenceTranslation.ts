@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { translationQueue } from '@/utils/translationQueue';
 import { translationCache } from '@/utils/translationCache';
+import { pdfTextProcessor } from '@/utils/pdfTextProcessor';
 import type { SentenceTranslation } from '@/types/translation';
 
 interface UseSentenceTranslationProps {
@@ -18,9 +19,15 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
     if (!pdf) return [];
 
     try {
+      const cached = pdfTextProcessor.getProcessingResult(pageNumber, 1.0);
+      if (cached) {
+        return cached.sentences.map(s => s.text);
+      }
+
       const page = await pdf.getPage(pageNumber);
       const textContent = await page.getTextContent();
       
+
       const fragments = textContent.items.map((item: any) => ({
         text: item.str || '',
         style: {

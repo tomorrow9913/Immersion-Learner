@@ -1,21 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { SentenceTranslation } from '@/types/translation';
-
-interface TextFragment {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  text: string;
-}
-
-interface HighlightedSentence {
-  id: string;
-  text: string;
-  fragments: TextFragment[];
-  sentenceIndex: number;
-}
+import { pdfTextProcessor, type Coordinate } from '@/utils/pdfTextProcessor';
 
 interface UseHighlightingProps {
   pdf: PDFDocumentProxy | null;
@@ -33,105 +19,54 @@ export const useHighlighting = ({
   onSentenceHover
 }: UseHighlightingProps) => {
   const [highlightedSentenceId, setHighlightedSentenceId] = useState<string | null>(null);
-  const [sentencePositions, setSentencePositions] = useState<HighlightedSentence[]>([]);
+  const [processedData, setProcessedData] = useState<{
+    sentences: any[];
+    scale: number;
+  } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const pageContainerRef = useRef<HTMLElement | null>(null);
 
-  const extractTextFragments = useCallback(async (page: any) => {
-    try {
-      const textContent = await page.getTextContent();
-
-      return textContent.items
-        .filter((item: any) => item.str && item.str.trim())
-        .map((item: any) => {
-          const transform = item.transform;
-          return {
-            x: transform[4],
-            y: transform[5],
-            width: item.width || 0,
-            height: item.height || 0,
-            text: item.str
-          };
-        });
-    } catch (error) {
-      console.error('Error extracting text fragments:', error);
-      return [];
-    }
-  }, []);
-
-  const mapSentencesToFragments = useCallback((
-    sentences: SentenceTranslation[],
-    fragments: TextFragment[]
-  ): HighlightedSentence[] => {
-    return sentences.map((sentence, index) => {
-      const sentenceWords = sentence.originalText.toLowerCase().split(/\s+/);
-      const matchedFragments: TextFragment[] = [];
-      let remainingWords = [...sentenceWords];
-
-      fragments.forEach(fragment => {
-        const fragmentText = fragment.text.toLowerCase().trim();
-        const fragmentWords = fragmentText.split(/\s+/);
-
-        if (fragmentWords.length === 0) return;
-
-        for (let i = 0; i <= remainingWords.length - fragmentWords.length; i++) {
-          const window = remainingWords.slice(i, i + fragmentWords.length);
-          
-          if (fragmentWords.every((word, wordIndex) => {
-            const cleanWord = word.replace(/[^\w]/g, '');
-            const cleanWindow = window[wordIndex].replace(/[^\w]/g, '');
-            return cleanWord && cleanWindow && cleanWord.includes(cleanWindow);
-          })) {
-            matchedFragments.push(fragment);
-            remainingWords.splice(i, fragmentWords.length);
-            break;
-          }
-        }
-      });
-
-      return {
-        id: sentence.id,
-        text: sentence.originalText,
-        fragments: matchedFragments,
-        sentenceIndex: index
-      };
-    });
-  }, []);
-
-  const processSentenceCoordinates = useCallback(async () => {
+  const processPageData = useCallback(async () => {
     if (!pdf || isProcessing) return;
 
     setIsProcessing(true);
     try {
-      const page = await pdf.getPage(currentPage);
-      const fragments = await extractTextFragments(page);
-      const mappedSentences = mapSentencesToFragments(translations, fragments);
-      setSentencePositions(mappedSentences);
+      const result = await pdfTextProcessor.processPageWithCoordinates(
+        pdf,
+        currentPage,
+        translations,
+        scale
+      );
+
+      setProcessedData({
+        sentences: result.sentences,
+        scale
+      });
     } catch (error) {
-      console.error('Error processing sentence coordinates:', error);
+      console.error('Error processing page data:', error);
     } finally {
       setIsProcessing(false);
     }
-  }, [pdf, currentPage, translations, isProcessing, extractTextFragments, mapSentencesToFragments]);
+  }, [pdf, currentPage, translations, scale, isProcessing]);
 
   useEffect(() => {
-    processSentenceCoordinates();
-  }, [processSentenceCoordinates]);
+    processPageData();
+  }, [processPageData]);
 
   const handlePdfMouseMove = useCallback((event: Event) => {
     const mouseEvent = event as MouseEvent;
-    if (!pageContainerRef.current) return;
+    if (!pageContainerRef.current || !processedData) return;
 
     const containerRect = pageContainerRef.current.getBoundingClientRect();
     const x = mouseEvent.clientX - containerRect.left;
     const y = mouseEvent.clientY - containerRect.top;
 
-    const hoveredSentence = sentencePositions.find(sentence => {
-      return sentence.fragments.some(fragment => {
-        const scaledX = fragment.x * scale;
-        const scaledY = fragment.y * scale;
-        const scaledWidth = fragment.width * scale;
-        const scaledHeight = fragment.height * scale;
+    const hoveredSentence = processedData.sentences.find(sentence => {
+      return sentence.coordinates.some((coord: any) => {
+        const scaledX = coord.x * scale;
+        const scaledY = coord.y * scale;
+        const scaledWidth = coord.width * scale;
+        const scaledHeight = coord.height * scale;
 
         return x >= scaledX && x <= scaledX + scaledWidth &&
                y >= scaledY && y <= scaledY + scaledHeight;
@@ -144,7 +79,7 @@ export const useHighlighting = ({
       setHighlightedSentenceId(hoveredId);
       onSentenceHover?.(hoveredId);
     }
-  }, [sentencePositions, highlightedSentenceId, onSentenceHover, scale]);
+  }, [processedData, highlightedSentenceId, onSentenceHover, scale]);
 
   const handlePdfMouseLeave = useCallback(() => {
     if (highlightedSentenceId !== null) {
@@ -158,35 +93,37 @@ export const useHighlighting = ({
     onSentenceHover?.(sentenceId);
   }, [onSentenceHover]);
 
-  const getCoordinateHighlights = useCallback((sentenceId: string): React.CSSProperties[] => {
-    const sentence = sentencePositions.find(s => s.id === sentenceId);
+  const getCoordinateHighlights = useCallback((sentenceId: string): any[] => {
+    if (!processedData) return [];
+
+    const sentence = processedData.sentences.find(s => s.id === sentenceId);
     if (!sentence) return [];
 
-    return sentence.fragments.map(fragment => {
-      const scaledX = fragment.x * scale;
-      const scaledY = fragment.y * scale;
-      const scaledWidth = fragment.width * scale;
-      const scaledHeight = fragment.height * scale;
+      return sentence.coordinates.map((coord: Coordinate) => {
+        const scaledX = coord.x * scale;
+        const scaledY = coord.y * scale;
+        const scaledWidth = coord.width * scale;
+        const scaledHeight = coord.height * scale;
 
-      return {
-        position: 'absolute',
-        left: `${scaledX}px`,
-        top: `${scaledY}px`,
-        width: `${scaledWidth}px`,
-        height: `${scaledHeight}px`,
-        backgroundColor: sentenceId === highlightedSentenceId 
-          ? 'rgba(59, 130, 246, 0.3)' 
-          : 'rgba(59, 130, 246, 0.1)',
-        border: sentenceId === highlightedSentenceId 
-          ? '2px solid rgb(59, 130, 246)' 
-          : '1px solid rgb(59, 130, 246)',
-        borderRadius: '2px',
-        pointerEvents: 'none',
-        zIndex: sentenceId === highlightedSentenceId ? 15 : 10,
-        transition: 'all 0.2s ease'
-      };
-    });
-  }, [sentencePositions, highlightedSentenceId, scale]);
+        return {
+          position: 'absolute',
+          left: `${scaledX}px`,
+          top: `${scaledY}px`,
+          width: `${scaledWidth}px`,
+          height: `${scaledHeight}px`,
+          backgroundColor: sentenceId === highlightedSentenceId 
+            ? 'rgba(59, 130, 246, 0.3)' 
+            : 'rgba(59, 130, 246, 0.1)',
+          border: sentenceId === highlightedSentenceId 
+            ? '2px solid rgb(59, 130, 246)' 
+            : '1px solid rgb(59, 130, 246)',
+          borderRadius: '2px',
+          pointerEvents: 'none',
+          zIndex: sentenceId === highlightedSentenceId ? 15 : 10,
+          transition: 'all 0.2s ease'
+        };
+      });
+  }, [processedData, highlightedSentenceId, scale]);
 
   useEffect(() => {
     const pageElement = document.querySelector(`.react-pdf__Page[data-page-number="${currentPage}"]`);
@@ -205,7 +142,7 @@ export const useHighlighting = ({
 
   return {
     highlightedSentenceId,
-    sentencePositions,
+    sentencePositions: processedData?.sentences || [],
     isProcessing,
     handleTranslationHover,
     getCoordinateHighlights
