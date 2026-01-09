@@ -19,6 +19,16 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
   
   // [수정 1] 중복 요청 방지용 Ref (렌더링 없이 상태 추적)
   const pendingPages = useRef<Set<number>>(new Set());
+  
+  // [추가] 페이지 변경 감지를 위한 이전 페이지 저장
+  const previousPageRef = useRef<number>(0);
+
+  // [추가] Tab 이동 감지: 다른 페이지로 이동했다가 다시 돌아올 때만 실패 목록 초기화
+  const isRevisitingPage = useCallback((newPage: number) => {
+    // 현재 페이지와 새 페이지가 다르고, 이전 페이지로 돌아가는 경우에만 재시도 허용
+    return previousPageRef.current !== newPage && 
+           Math.abs(newPage - previousPageRef.current) > 1;
+  }, []);
 
   const extractSentencesFromPage = useCallback(async (pageNumber: number): Promise<string[]> => {
     if (!pdf) return [];
@@ -64,7 +74,10 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
     if (!pdf) return;
 
     // [Safety Check] 처리 중이거나, 이미 성공했거나, '실패 목록'에 있다면 중단
-    if (pendingPages.current.has(pageNumber) || translations.has(pageNumber) || failedPages.has(pageNumber)) {
+    // 단, Re-visit 시에는 isRevisitingPage 체크로 재시도 허용
+    if (pendingPages.current.has(pageNumber) || 
+        translations.has(pageNumber) || 
+        (failedPages.has(pageNumber) && !isRevisitingPage(pageNumber))) {
       return;
     }
 
@@ -133,6 +146,7 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
     if (pdf && currentPage > 0) {
       // 1. 만약 현재 페이지가 이전에 실패했던 페이지라면? -> 실패 목록에서 제거 (재시도 기회 부여)
       if (failedPages.has(currentPage)) {
+        console.log('🔄 Failed page detected, unlocking retry for page:', currentPage);
         setFailedPages(prev => {
           const next = new Set(prev);
           next.delete(currentPage);
@@ -144,12 +158,29 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
 
       // 2. 번역 데이터가 없으면 요청 시작
       if (!translations.has(currentPage)) {
+        console.log('📄 No translation found, starting translation for page:', currentPage);
         translatePageSentences(currentPage, 'high');
+      }
+
+      // [추가] Re-visit 시 이전 페이지 저장 (Tab 이동 감지)
+      if (isRevisitingPage(currentPage)) {
+        previousPageRef.current = currentPage;
+      } else {
+        // 다른 페이지로 이동한 경우: 이전 페이지가 실패했다면 실패 목록에서 제거
+        if (previousPageRef.current > 0 && failedPages.has(previousPageRef.current)) {
+          console.log('🔄 Tab away detected, clearing failure for previous page:', previousPageRef.current);
+          setFailedPages(prev => {
+            const next = new Set(prev);
+            next.delete(previousPageRef.current);
+            return next;
+          });
+        }
+        previousPageRef.current = currentPage;
       }
 
       prefetchPages(currentPage);
     }
-  }, [pdf, currentPage, translatePageSentences, prefetchPages, translations, failedPages]);
+  }, [pdf, currentPage, translatePageSentences, prefetchPages, translations, failedPages, isRevisitingPage]); // failedPages, isRevisitingPage 의존성 필수
 
   // [디버깅] 현재 상태 로깅
   useEffect(() => {
