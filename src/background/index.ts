@@ -92,6 +92,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         const { original, translated } = message;
         enqueueSave(original, translated);
         sendResponse({ success: true });
+      } else if (message.type === 'TRANSLATE_SENTENCE') {
+        const { text, targetLang = 'ko' } = message;
+        const translatedText = await translateText(text, targetLang);
+        sendResponse({ success: true, translatedText });
       }
     } catch (error) {
       console.error('메시지 처리 중 오류 발생:', error);

@@ -51,7 +51,7 @@ const PDFControls: React.FC<PDFControlsProps> = ({
   return (
     <Card className="shadow-sm border-t border-gray-200 rounded-none bg-white">
       <CardContent className="p-4">
-        <div className="max-w-5xl mx-auto flex justify-between items-center">
+        <div className="w-full flex justify-between items-center px-2">
           <div className="flex items-center gap-2 text-lg font-bold text-gray-800">
             <span>Page</span>
             <input 

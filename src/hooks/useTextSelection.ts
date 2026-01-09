@@ -72,8 +72,11 @@ export const useTextSelection = (onSelectionCleared?: () => void) => {
           const range = selection!.getRangeAt(0);
           const rect = range.getBoundingClientRect();
           
+
+          const processedText = selectedText;
+          
           setState({
-            selection: { text: selectedText, range },
+            selection: { text: processedText, range },
             popupPosition: calculatePopupPosition(rect),
           });
         } catch (error) {
@@ -94,16 +97,19 @@ export const useTextSelection = (onSelectionCleared?: () => void) => {
   useEffect(() => {
     const handleMouseDown = (event: MouseEvent) => {
       const popupElement = document.getElementById('translate-popup');
-            // 1. 팝업 내부 클릭이면 무시 (유지)
+      const highlightedElement = event.target as HTMLElement;
+      
       if (popupElement && popupElement.contains(event.target as Node)) {
         return;
       }
-            // 2. [수정 포인트] 선택 영역을 '즉시' 지우지 말고, 새로운 선택이 시작되는지 확인하거나
-            // 기존 팝업만 닫도록 처리 (Selection API 호출 최소화)
-      setState(prev => ({ ...prev, popupPosition: null })); // 팝업만 일단 닫음
-      onSelectionCleared?.(); // Call the callback to reset translation state
-            // 주의: removeAllRanges()를 여기서 호출하면 더블 클릭 시 선택이 풀릴 수 있음
-            // 브라우저는 클릭 시 자동으로 선택을 해제하므로 굳이 강제로 호출할 필요가 없을 수 있음
+      
+      if (highlightedElement?.closest('.sentence-highlight')) {
+        event.preventDefault();
+        return;
+      }
+      
+      setState(prev => ({ ...prev, popupPosition: null }));
+      onSelectionCleared?.();
     };
 
     document.addEventListener('mouseup', handleMouseUp);

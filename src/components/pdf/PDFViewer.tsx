@@ -18,7 +18,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
 }) => {
   if (!file) {
     return (
-      <div className="max-w-5xl mx-auto bg-white shadow-lg p-4 border border-gray-200 rounded-lg flex justify-center min-h-[600px] relative">
+      <div className="w-full bg-white shadow-lg p-4 border border-gray-200 rounded-lg flex justify-center min-h-[600px] relative">
         <div className="text-gray-500 text-center py-20">
           PDF 파일을 선택해주세요
         </div>
@@ -26,13 +26,13 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
     );
   }
 
-  return (
-    <div className="max-w-5xl mx-auto bg-white shadow-lg p-4 border border-gray-200 rounded-lg flex justify-center min-h-[600px] relative">
+    return (
+    <div className="w-full bg-white shadow-lg p-4 border border-gray-200 rounded-lg flex justify-center min-h-[600px] relative">
       <Document
         file={file}
         onLoadSuccess={onDocumentLoadSuccess}
         onLoadError={onDocumentLoadError}
-        className="flex flex-col items-center"
+        className="flex flex-col items-center w-full"
         loading={<div className="text-gray-500 animate-pulse">Loading PDF...</div>}
         error={<div className="text-red-500">Failed to load PDF.</div>}
       >
@@ -41,6 +41,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({
           renderTextLayer={true} 
           renderAnnotationLayer={true}
           scale={PDF_CONFIG.SCALE}
+          className="max-w-full"
         />
       </Document>
     </div>
