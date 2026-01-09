@@ -14,6 +14,7 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
   const [translations, setTranslations] = useState<Map<number, SentenceTranslation[]>>(new Map());
   const [isTranslating, setIsTranslating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [translationProgress, setTranslationProgress] = useState<{ currentPage: number; processed: number; total: number } | null>(null);
   // failedPages State가 반드시 있어야 합니다: const [failedPages, setFailedPages] = useState<Set<number>>(new Set());
   const [failedPages, setFailedPages] = useState<Set<number>>(new Set());
   
@@ -111,20 +112,79 @@ const translatePageSentences = useCallback(async (pageNumber: number, priority: 
         return; // 빈 결과는 저장하지 않고 그냥 리턴
       }
 
-      const translationPromises = sentences.map((sentence, index) => 
-        translationQueue.addToQueue(
-          sentence,
-          pageNumber,
-          index,
-          priority
-        )
-      );
-
-      const results = await Promise.all(translationPromises);
+      const BATCH_SIZE = 5;
+      const results: SentenceTranslation[] = [];
       
-// 성공 시 저장
-      setTranslations(prev => new Map(prev).set(pageNumber, results));
-      await translationCache.storeSentences(results);
+      setTranslationProgress({
+        currentPage: pageNumber,
+        processed: 0,
+        total: sentences.length
+      });
+      
+      const isPageContextValid = () => {
+        if (!pdf) return false;
+        
+        const isTargetPageStillRelevant = currentPage === pageNumber || 
+                                         currentPage === pageNumber - 1 || 
+                                         currentPage === pageNumber + 1;
+        
+        return isTargetPageStillRelevant;
+      };
+
+      for (let i = 0; i < sentences.length; i += BATCH_SIZE) {
+        if (!isPageContextValid()) {
+          console.log(`Page context changed, aborting translation for page ${pageNumber}`);
+          setTranslationProgress(null);
+          return;
+        }
+
+        const batch = sentences.slice(i, i + BATCH_SIZE);
+        const batchStartIndex = i;
+        
+        const batchPromises = batch.map((sentence, batchIndex) => 
+          translationQueue.addToQueue(
+            sentence,
+            pageNumber,
+            batchStartIndex + batchIndex,
+            priority
+          )
+        );
+
+        const batchResults = await Promise.all(batchPromises);
+        results.push(...batchResults);
+
+        const processedCount = Math.min(i + BATCH_SIZE, sentences.length);
+        setTranslationProgress({
+          currentPage: pageNumber,
+          processed: processedCount,
+          total: sentences.length
+        });
+
+        setTranslations(prev => {
+          const newMap = new Map(prev);
+          const existingResults = newMap.get(pageNumber) || [];
+          const updatedResults = [...existingResults];
+          
+          batchResults.forEach((result, batchIndex) => {
+            const globalIndex = batchStartIndex + batchIndex;
+            updatedResults[globalIndex] = result;
+          });
+          
+          return newMap.set(pageNumber, updatedResults);
+        });
+
+        if (i + BATCH_SIZE < sentences.length) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+      }
+      
+      setTranslationProgress(null);
+      
+      const validResults = results.filter(r => r.status === 'completed');
+      if (validResults.length > 0) {
+        setTranslations(prev => new Map(prev).set(pageNumber, validResults));
+        await translationCache.storeSentences(validResults);
+      }
     } catch (err) {
       console.error(`페이지 ${pageNumber} 번역 실패:`, err);
       // [수정] 실패 시 translations 맵에는 아무것도 넣지 않음 (그래야 재시도 가능)
@@ -136,7 +196,7 @@ const translatePageSentences = useCallback(async (pageNumber: number, priority: 
       pendingPages.current.delete(pageNumber);
       if (priority === 'high') setIsTranslating(false);
     }
-  }, [pdf, docId, extractSentencesFromPage, translations, failedPages]);
+  }, [pdf, docId, extractSentencesFromPage, translations, failedPages, currentPage]);
 
   const prefetchPages = useCallback((basePage: number) => {
     if (!pdf) return;
@@ -205,11 +265,12 @@ const translatePageSentences = useCallback(async (pageNumber: number, priority: 
     });
   }, [currentPage, translations, failedPages]);
 
-  return {
+return {
     translations,
     currentPageTranslations: translations.get(currentPage) || [],
     isTranslating,
     error,
+    translationProgress,
     failedPages,
     translatePageSentences,
     retryFailedPage: useCallback((pageNumber: number) => {
@@ -226,6 +287,7 @@ const translatePageSentences = useCallback(async (pageNumber: number, priority: 
       setTranslations(new Map());
       setFailedPages(new Set());
       pendingPages.current.clear();
+      setTranslationProgress(null);
     }, [])
   };
 };

@@ -1,7 +1,15 @@
 import { fetchWithRetry } from '@/utils/retry';
 
-type GoogleTranslateSentence = [string, string, ...any[]];
-type GoogleTranslateResponse = [GoogleTranslateSentence[], ...any[]];
+type GoogleTranslateSentence = [
+  string, 
+  string, 
+  ...unknown[]
+];
+
+type GoogleTranslateResponse = [
+  GoogleTranslateSentence[],
+  ...unknown[]
+];
 
 
 interface DictionaryEntry {
@@ -25,20 +33,40 @@ interface DictionaryResult {
   examples: string[];
 }
 
-// [수정 2] 타입 가드 변경 (data 프로퍼티 검사 제거)
-function isGoogleTranslateResponse(data: any): data is GoogleTranslateResponse {
+function isGoogleTranslateSentence(data: unknown): data is GoogleTranslateSentence {
   return (
     Array.isArray(data) &&
-    data.length > 0 &&
-    Array.isArray(data[0])
+    data.length >= 2 &&
+    typeof data[0] === 'string' &&
+    typeof data[1] === 'string'
   );
 }
-function isDictionaryData(data: any): data is DictionaryEntry[] {
+
+function isGoogleTranslateResponse(data: unknown): data is GoogleTranslateResponse {
   return (
     Array.isArray(data) &&
     data.length > 0 &&
-    typeof data[0] === 'object' &&
-    data[0] !== null
+    Array.isArray(data[0]) &&
+    data[0].every((item): item is GoogleTranslateSentence => 
+      isGoogleTranslateSentence(item)
+    )
+  );
+}
+function isDictionaryEntry(data: unknown): data is DictionaryEntry {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    (!('phonetic' in data) || typeof data.phonetic === 'string' || data.phonetic === undefined) &&
+    (!('phonetics' in data) || Array.isArray(data.phonetics)) &&
+    (!('meanings' in data) || Array.isArray(data.meanings))
+  );
+}
+
+function isDictionaryData(data: unknown): data is DictionaryEntry[] {
+  return (
+    Array.isArray(data) &&
+    data.length > 0 &&
+    isDictionaryEntry(data[0])
   );
 }
 
@@ -59,21 +87,33 @@ export async function translateText(text: string, targetLang = 'ko'): Promise<st
 
     const rawData = await response.text();
 
-    // [추가] HTML 에러 응답(차단됨) 감지
     if (rawData.trim().startsWith('<')) {
       console.error('API Error (HTML received):', rawData.substring(0, 100));
       throw new Error('번역 서비스가 일시적으로 제한되었습니다.');
     }
 
-    const data = JSON.parse(rawData);
+    let data: unknown;
+    try {
+      data = JSON.parse(rawData);
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError);
+      throw new Error('번역 서비스 응답 파싱에 실패했습니다.');
+    }
 
     // [디버깅] API 응답 형태 상세 로깅
-    console.log('Google Translate API Response:', {
-      isArray: Array.isArray(data),
-      length: data?.length,
-      firstElement: data?.[0],
-      firstElementType: data?.[0]?.constructor?.name
-    });
+    if (isGoogleTranslateResponse(data)) {
+      console.log('Google Translate API Response:', {
+        isArray: true,
+        length: data.length,
+        firstElement: data[0],
+        isValidResponse: true
+      });
+    } else {
+      console.log('Google Translate API Response:', {
+        isArray: Array.isArray(data),
+        isValidResponse: false
+      });
+    }
 
     // [수정 3] 파싱 로직 변경
     if (isGoogleTranslateResponse(data)) {
@@ -122,7 +162,13 @@ export async function getDictionaryData(word: string): Promise<DictionaryResult 
       return null;
     }
 
-    const data = JSON.parse(rawData);
+    let data: unknown;
+    try {
+      data = JSON.parse(rawData);
+    } catch (parseError) {
+      console.error('Dictionary API JSON parse error:', parseError);
+      return null;
+    }
 
     if (isDictionaryData(data) && data.length > 0) {
       const firstEntry = data[0];
