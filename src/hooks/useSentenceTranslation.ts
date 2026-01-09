@@ -116,13 +116,13 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
     ];
 
     prefetchTargets.forEach(({ page, priority }) => {
-      if (page <= pdf.numPages) {
+      if (page <= pdf.numPages && !failedPages.has(page)) {
         requestIdleCallback(() => {
           translatePageSentences(page, priority);
         });
       }
     });
-  }, [pdf, translatePageSentences]);
+  }, [pdf, translatePageSentences, failedPages]);
 
   const prioritizeCurrentPage = useCallback((pageNumber: number) => {
     translationQueue.prioritizePage(pageNumber);

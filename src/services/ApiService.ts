@@ -1,8 +1,6 @@
 import { fetchWithRetry } from '@/utils/retry';
 
-interface GoogleTranslateResponse {
-  data: Array<[string, string, ...any[]]>;
-}
+type GoogleTranslateResponse = Array<Array<[string, string, ...any[]]>>;
 
 interface DictionaryEntry {
   phonetic?: string;
@@ -27,12 +25,11 @@ interface DictionaryResult {
 
 function isGoogleTranslateResponse(data: any): data is GoogleTranslateResponse {
   return (
-    data &&
-    typeof data === 'object' &&
-    'data' in (data as Record<string, unknown>) &&
-    Array.isArray((data as Record<string, unknown>).data) &&
-    (data as GoogleTranslateResponse).data.length > 0 &&
-    Array.isArray((data as GoogleTranslateResponse).data[0])
+    Array.isArray(data) &&
+    data.length > 0 &&
+    Array.isArray(data[0]) &&
+    data[0].length > 0 &&
+    typeof data[0][0] === 'string'
   );
 }
 
@@ -64,7 +61,7 @@ export async function translateText(text: string, targetLang = 'ko'): Promise<st
     const data = JSON.parse(rawData);
     
     if (isGoogleTranslateResponse(data)) {
-      const translatedText = data.data[0].map((item) => item[0]).join('');
+      const translatedText = data[0].map((item: any) => item[0]).join('');
       if (translatedText.trim().length === 0) {
         throw new Error('번역 결과가 비어있습니다.');
       }

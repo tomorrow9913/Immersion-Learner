@@ -97,8 +97,8 @@ class TranslationQueue {
         text: request.text
       });
 
-      if (!response?.success) {
-        throw new Error(response?.error || '번역 실패');
+      if (!response?.success || !response?.translatedText?.trim()) {
+        throw new Error(response?.error || '번역 실패 또는 빈 응답');
       }
 
       const [pageNumberStr, sentenceIndexStr] = request.id.split('-').slice(0, 2);
