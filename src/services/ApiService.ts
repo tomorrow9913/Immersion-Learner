@@ -1,6 +1,51 @@
 import { fetchWithRetry } from '@/utils/retry';
 
-export async function translateText(text: string, targetLang = 'ko') {
+interface GoogleTranslateResponse {
+  data: Array<[string, string, ...any[]]>;
+}
+
+interface DictionaryEntry {
+  phonetic?: string;
+  phonetics?: Array<{
+    text?: string;
+    audio?: string;
+  }>;
+  meanings?: Array<{
+    definitions?: Array<{
+      definition?: string;
+      example?: string;
+    }>;
+  }>;
+}
+
+interface DictionaryResult {
+  phonetic?: string;
+  audioUrl?: string;
+  meanings: string[];
+  examples: string[];
+}
+
+function isGoogleTranslateResponse(data: any): data is GoogleTranslateResponse {
+  return (
+    data &&
+    typeof data === 'object' &&
+    'data' in (data as Record<string, unknown>) &&
+    Array.isArray((data as Record<string, unknown>).data) &&
+    (data as GoogleTranslateResponse).data.length > 0 &&
+    Array.isArray((data as GoogleTranslateResponse).data[0])
+  );
+}
+
+function isDictionaryData(data: any): data is DictionaryEntry[] {
+  return (
+    Array.isArray(data) &&
+    data.length > 0 &&
+    typeof data[0] === 'object' &&
+    data[0] !== null
+  );
+}
+
+export async function translateText(text: string, targetLang = 'ko'): Promise<string> {
   if (!text || text.trim().length === 0) {
     throw new Error('번역할 텍스트가 비어있습니다.');
   }
@@ -18,8 +63,8 @@ export async function translateText(text: string, targetLang = 'ko') {
     const rawData = await response.text();
     const data = JSON.parse(rawData);
     
-    if (data && data[0] && Array.isArray(data[0])) {
-      const translatedText = data[0].map((item: any) => item[0]).join('');
+    if (isGoogleTranslateResponse(data)) {
+      const translatedText = data.data[0].map((item) => item[0]).join('');
       if (translatedText.trim().length === 0) {
         throw new Error('번역 결과가 비어있습니다.');
       }
@@ -36,7 +81,7 @@ export async function translateText(text: string, targetLang = 'ko') {
   }
 }
 
-export async function getDictionaryData(word: string) {
+export async function getDictionaryData(word: string): Promise<DictionaryResult | null> {
   if (!word || word.trim().length === 0) {
     return null;
   }
@@ -57,17 +102,17 @@ export async function getDictionaryData(word: string) {
     
     const data = JSON.parse(rawData);
     
-    if (Array.isArray(data) && data.length > 0) {
+    if (isDictionaryData(data) && data.length > 0) {
       const firstEntry = data[0];
-      const phonetic = firstEntry.phonetic || firstEntry.phonetics?.find((p: any) => p.text)?.text;
-      const audioUrl = firstEntry.phonetics?.find((p: any) => p.audio)?.audio;
+      const phonetic = firstEntry.phonetic || firstEntry.phonetics?.find((p) => p.text)?.text;
+      const audioUrl = firstEntry.phonetics?.find((p) => p.audio)?.audio;
       
-      const meanings = firstEntry.meanings?.flatMap((meaning: any) => 
-        meaning.definitions?.map((def: any) => def.definition).filter(Boolean) || []
+      const meanings = firstEntry.meanings?.flatMap((meaning) => 
+        meaning.definitions?.map((def) => def.definition).filter((def): def is string => Boolean(def)) || []
       ) || [];
       
-      const examples = firstEntry.meanings?.flatMap((meaning: any) => 
-        meaning.definitions?.map((def: any) => def.example).filter(Boolean) || []
+      const examples = firstEntry.meanings?.flatMap((meaning) => 
+        meaning.definitions?.map((def) => def.example).filter((example): example is string => Boolean(example)) || []
       ) || [];
       
       return {

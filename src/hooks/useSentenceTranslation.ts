@@ -75,15 +75,12 @@ export const useSentenceTranslation = ({ pdf, currentPage }: UseSentenceTranslat
       }
 
       const translationPromises = sentences.map(async (sentence, index) => {
-        const translation = await translationQueue.addToQueue(
+        return translationQueue.addToQueue(
           sentence,
           pageNumber,
           index,
           priority
         );
-
-        await translationCache.storeSentence(translation);
-        return translation;
       });
 
       const results = await Promise.all(translationPromises);
