@@ -28,6 +28,7 @@ export interface PageTranslationCache {
   pageTranslation?: string;
   createdAt: number;
   expiresAt: number;
+  version: number;
 }
 
 export interface TranslationQueueStatus {

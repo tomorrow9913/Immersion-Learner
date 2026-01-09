@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { translationQueue } from '@/utils/translationQueue';
-import { atomicTranslationCache as translationCache } from '@/utils/atomicTranslationCache';
+import { translationCache } from '@/utils/translationCache';
 import { pdfTextProcessor } from '@/utils/pdfTextProcessor';
 import type { SentenceTranslation } from '@/types/translation';
 
@@ -91,7 +91,7 @@ const translatePageSentences = useCallback(async (pageNumber: number, priority: 
       return;
     }
 
-    const cached = await translationCache.getPageTranslation(docId, pageNumber);
+    const cached = await translationCache.getPageTranslation(pageNumber);
     if (cached && cached.sentences.length > 0) {
       setTranslations(prev => new Map(prev).set(pageNumber, cached.sentences));
       return;
@@ -124,7 +124,7 @@ const translatePageSentences = useCallback(async (pageNumber: number, priority: 
       
 // 성공 시 저장
       setTranslations(prev => new Map(prev).set(pageNumber, results));
-      await translationCache.storePageTranslation(docId, pageNumber, results);
+      await translationCache.storeSentences(results);
     } catch (err) {
       console.error(`페이지 ${pageNumber} 번역 실패:`, err);
       // [수정] 실패 시 translations 맵에는 아무것도 넣지 않음 (그래야 재시도 가능)
