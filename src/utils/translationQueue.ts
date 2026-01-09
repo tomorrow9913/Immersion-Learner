@@ -12,6 +12,10 @@ class TranslationQueue {
   private isProcessing = false;
   private currentTask: TranslationRequest | null = null;
 
+  // FUTURE ENHANCEMENT: For large-scale applications (>1000 items),
+  // consider implementing a Binary Heap-based priority queue for O(log n) insertions
+  // Current array-based sorting provides O(n log n) which is sufficient for typical use cases
+
   async addToQueue(
     text: string, 
     pageNumber: number, 
