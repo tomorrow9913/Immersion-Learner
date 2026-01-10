@@ -122,7 +122,7 @@ export class PDFTextAssembler {
    * Creates a ProcessedLine object from a set of TextItems.
    */
   private createLine(items: TextItemWithStyle[], pageHeight: number): ProcessedLine {
-    const text = items.map((item) => item.str).join('');
+    const text = items.map((item) => item.str).join(' ');
     const firstItem = items[0];
     const lastItem = items[items.length - 1];
 
