@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { pdfjs, Document, Page } from 'react-pdf';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -226,6 +226,17 @@ const PDFReader = () => {
     };
 
     const sentences = currentPageData?.hydratedSentences || [];
+    const sentenceRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+    const handleSentenceHover = (id: number | null) => {
+        setHoveredIndex(id);
+        if (id !== null && sentenceRefs.current[id]) {
+            sentenceRefs.current[id]?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest',
+            });
+        }
+    };
 
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden w-full">
@@ -296,7 +307,7 @@ const PDFReader = () => {
                                                         <HighlightingLayer
                                                             sentences={currentPageData?.parsedData.sentences || []}
                                                             hoveredIndex={hoveredIndex}
-                                                            onSentenceHover={setHoveredIndex}
+                                                            onSentenceHover={handleSentenceHover}
                                                             scale={PDF_CONFIG.SCALE}
                                                         />
                                                     </Page>
@@ -342,6 +353,9 @@ const PDFReader = () => {
                                                     sentences.map((sentence) => (
                                                         <div
                                                             key={sentence.id}
+                                                            ref={(el) => {
+                                                                sentenceRefs.current[sentence.id] = el;
+                                                            }}
                                                             className={`border-b border-gray-100 pb-3 last:border-b-0 transition-colors ${hoveredIndex === sentence.id ? 'bg-blue-50' : ''}`}
                                                             onMouseEnter={() => setHoveredIndex(sentence.id)}
                                                             onMouseLeave={() => setHoveredIndex(null)}
