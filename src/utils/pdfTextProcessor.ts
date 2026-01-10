@@ -44,7 +44,7 @@ export class PDFTextProcessor {
     scale: number
   ): Promise<PageTextProcessing> {
     const cacheKey = `page-${pageNumber}-${scale}`;
-    
+
     if (this.processingCache.has(cacheKey)) {
       return this.processingCache.get(cacheKey)!;
     }
@@ -124,60 +124,34 @@ export class PDFTextProcessor {
     sentence: string,
     fragments: TextFragment[]
   ): TextFragment[] {
-    const normalizedSentence = sentence.toLowerCase().trim();
-    const matchedFragments: TextFragment[] = [];
-    let remainingText = normalizedSentence;
-    const usedIndices = new Set<number>();
+    const normalize = (text: string) => text.replace(/[\s\u00A0\-\u2010-\u2015]/g, '').toLowerCase();
+    const targetNormalized = normalize(sentence);
 
-    fragments.forEach((fragment, index) => {
-      if (usedIndices.has(index) || !fragment.position) return;
+    if (!targetNormalized) return [];
 
-      const fragmentText = fragment.text.toLowerCase().trim();
-      if (!fragmentText) return;
+    const fragmentsWithNormalized = fragments.map(f => ({
+      original: f,
+      normalized: normalize(f.text)
+    }));
 
-      const fragmentIndex = remainingText.indexOf(fragmentText);
-      if (fragmentIndex !== -1) {
-        const isSequentialMatch = this.validateFragmentPosition(
-          remainingText,
-          fragmentText,
-          fragmentIndex
-        );
+    for (let i = 0; i < fragmentsWithNormalized.length; i++) {
+      let accumulated = '';
+      for (let j = i; j < fragmentsWithNormalized.length; j++) {
+        accumulated += fragmentsWithNormalized[j].normalized;
 
-        if (isSequentialMatch) {
-          matchedFragments.push(fragment);
-          usedIndices.add(index);
-          remainingText = remainingText.substring(fragmentIndex + fragmentText.length).trim();
+        if (targetNormalized.startsWith(accumulated)) {
+          if (targetNormalized === accumulated) {
+            return fragmentsWithNormalized.slice(i, j + 1).map(f => f.original);
+          }
+        } else if (accumulated.startsWith(targetNormalized)) {
+          return fragmentsWithNormalized.slice(i, j + 1).map(f => f.original);
+        } else {
+          break;
         }
       }
-    });
-
-    return matchedFragments;
-  }
-
-  private validateFragmentPosition(
-    remainingText: string,
-    fragmentText: string,
-    foundIndex: number
-  ): boolean {
-    if (foundIndex === 0) return true;
-
-    const beforeFragment = remainingText.substring(0, foundIndex);
-    const hasValidSeparator = /^[.\s]*$/.test(beforeFragment);
-    
-    if (hasValidSeparator) return true;
-
-    const words = remainingText.split(/\s+/);
-    const fragmentWords = fragmentText.split(/\s+/);
-    
-    let wordIndex = 0;
-    for (const word of words) {
-      if (word.toLowerCase() === fragmentWords[0]) {
-        wordIndex++;
-        break;
-      }
     }
-    
-    return wordIndex > 0 && fragmentWords.length <= words.length - wordIndex + 1;
+
+    return [];
   }
 
 

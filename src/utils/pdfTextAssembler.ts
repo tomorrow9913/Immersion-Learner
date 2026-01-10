@@ -31,7 +31,7 @@ export class PDFTextAssembler {
     this.options = {
       sentenceEndings: ['.', '!', '?', '.', '！', '？'],
       enableNoiseFiltering: options.enableNoiseFiltering ?? true,
-      pageNumberPattern: options.pageNumberPattern ?? /^(\d+|\d+\s*\/\s*\d+|[A-Za-z]+\s*\d+)$/,
+      pageNumberPattern: options.pageNumberPattern ?? /^(\d+|\d+\s*\/\s*\d+|(Page|p\.|page)\s*\d+)$/i,
       headerFooterPattern: options.headerFooterPattern ?? /^(.{0,30})\s*(\d+|\d+\s*\/\s*\d+)$|^.{0,30}$/,
     };
   }
@@ -40,7 +40,7 @@ export class PDFTextAssembler {
     if (!fragments.length) return [];
 
     const cleanedText = this.mergeFragments(fragments);
-    const filteredText = this.options.enableNoiseFiltering 
+    const filteredText = this.options.enableNoiseFiltering
       ? this.filterNoise(cleanedText)
       : cleanedText;
 
@@ -60,7 +60,7 @@ export class PDFTextAssembler {
 
       if (fragment.position && lastX !== null && lastY !== null) {
         const distance = Math.sqrt(
-          Math.pow(fragment.position.x - lastX, 2) + 
+          Math.pow(fragment.position.x - lastX, 2) +
           Math.pow(fragment.position.y - lastY, 2)
         );
 
@@ -138,8 +138,7 @@ export class PDFTextAssembler {
       sentences.push(remaining);
     }
 
-    return sentences.filter(sentence => 
-      sentence.length > 3 && 
+    return sentences.filter(sentence =>
       !this.options.pageNumberPattern.test(sentence)
     );
   }
@@ -154,16 +153,16 @@ export class PDFTextAssembler {
 
       const rect = span.getBoundingClientRect();
       const style = window.getComputedStyle(span);
-      
+
       fragments.push({
         text: text,
-          style: {
-            color: style.color,
-            isBold: style.fontWeight === 'bold' || parseInt(style.fontWeight) > 500,
-            isItalic: style.fontStyle === 'italic',
-            fontSize: parseFloat(style.fontSize),
-            fontFamily: style.fontFamily
-          },
+        style: {
+          color: style.color,
+          isBold: style.fontWeight === 'bold' || parseInt(style.fontWeight) > 500,
+          isItalic: style.fontStyle === 'italic',
+          fontSize: parseFloat(style.fontSize),
+          fontFamily: style.fontFamily
+        },
         position: {
           x: rect.left,
           y: rect.top,
@@ -178,7 +177,7 @@ export class PDFTextAssembler {
 }
 
 export function assembleSentences(
-  fragments: TextFragment[], 
+  fragments: TextFragment[],
   options?: SentenceAssemblyOptions
 ): string[] {
   const assembler = new PDFTextAssembler(options);
@@ -186,7 +185,7 @@ export function assembleSentences(
 }
 
 export function extractAndAssembleSentences(
-  element: Element, 
+  element: Element,
   options?: SentenceAssemblyOptions
 ): string[] {
   const fragments = PDFTextAssembler.extractTextFragments(element);
