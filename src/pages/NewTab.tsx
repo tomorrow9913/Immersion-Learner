@@ -45,7 +45,7 @@ const App = () => {
         </nav>
       </header>
       
-      <main className="container mx-auto mt-8 pt-20 p-4">
+      <main className="container mx-auto p-4">
         <ErrorBoundary
           FallbackComponent={ErrorFallback}
           resetKeys={[activeTab]}
