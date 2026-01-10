@@ -1,195 +1,220 @@
-interface TextStyle {
-  color: string;
-  isBold: boolean;
-  isItalic: boolean;
-  fontSize: number;
-  fontFamily: string;
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import type { TextItem } from 'pdfjs-dist/types/src/display/api';
+import type { PDFRect, ParsedPageData, ParsedSentence } from '../types';
+
+// --- Interfaces ---
+
+interface TextItemWithStyle extends TextItem {
+  fontName: string;
+  // `transform` is [scaleX, skewY, skewX, scaleY, x, y]
 }
 
-interface TextFragment {
+interface ProcessedLine {
   text: string;
-  style: TextStyle;
-  position?: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
+  rect: PDFRect;
+  y: number;
 }
 
-interface SentenceAssemblyOptions {
-  sentenceEndings?: string[];
-  enableNoiseFiltering?: boolean;
-  pageNumberPattern?: RegExp;
-  headerFooterPattern?: RegExp;
+interface AssemblerOptions {
+  noiseCharsThreshold: number;
+  yTolerance: number;
+  sentenceEndings: string[];
 }
+
+// --- Main Class ---
 
 export class PDFTextAssembler {
-  private options: Required<SentenceAssemblyOptions>;
+  private readonly options: AssemblerOptions;
 
-  constructor(options: SentenceAssemblyOptions = {}) {
+  constructor(options: Partial<AssemblerOptions> = {}) {
     this.options = {
-      sentenceEndings: ['.', '!', '?', '.', '！', '？'],
-      enableNoiseFiltering: options.enableNoiseFiltering ?? true,
-      pageNumberPattern: options.pageNumberPattern ?? /^(\d+|\d+\s*\/\s*\d+|(Page|p\.|page)\s*\d+)$/i,
-      headerFooterPattern: options.headerFooterPattern ?? /^(.{0,30})\s*(\d+|\d+\s*\/\s*\d+)$|^.{0,30}$/,
+      noiseCharsThreshold: 10,
+      yTolerance: 5,
+      sentenceEndings: ['.', '!', '?', '。', '！', '？'],
+      ...options,
     };
   }
 
-  assembleSentences(fragments: TextFragment[]): string[] {
-    if (!fragments.length) return [];
+  /**
+   * Main method to process a page's text content.
+   * @param page - The PDFPageProxy object from PDF.js.
+   * @param pageNumber - The 1-based index of the page.
+   * @returns A ParsedPageData object containing structured sentences.
+   */
+  public async processPage(page: any, pageNumber: number): Promise<ParsedPageData> {
+    const textContent = await page.getTextContent();
+    const viewport = page.getViewport({ scale: 1 });
 
-    const cleanedText = this.mergeFragments(fragments);
-    const filteredText = this.options.enableNoiseFiltering
-      ? this.filterNoise(cleanedText)
-      : cleanedText;
+    if (!textContent.items || textContent.items.length === 0) {
+      return { pageNumber, sentences: [] };
+    }
 
-    return this.splitIntoSentences(filteredText);
+    const items = textContent.items as TextItemWithStyle[];
+
+    // 1. Sort items into visual reading order
+    const sortedItems = this.sortItems(items);
+
+    // 2. Merge items into lines
+    const lines = this.mergeItemsIntoLines(sortedItems, viewport.height);
+
+    // 3. Filter out noise (headers, footers, page numbers)
+    const filteredLines = this.filterNoiseLines(lines);
+
+    // 4. Assemble lines into sentences
+    const sentences = this.assembleLinesIntoSentences(filteredLines);
+
+    return { pageNumber, sentences };
   }
 
-  private mergeFragments(fragments: TextFragment[]): string {
-    if (!fragments.length) return '';
+  /**
+   * Sorts TextItem objects by their visual position (top-to-bottom, left-to-right).
+   */
+  private sortItems(items: TextItemWithStyle[]): TextItemWithStyle[] {
+    return [...items].sort((a, b) => {
+      const yA = a.transform[5];
+      const yB = b.transform[5];
+      const xA = a.transform[4];
+      const xB = b.transform[4];
 
-    let mergedText = '';
-    let lastX: number | null = null;
-    let lastY: number | null = null;
+      // Use a tolerance for Y-coordinate comparison
+      if (Math.abs(yA - yB) > this.options.yTolerance) {
+        return yB - yA; // Higher Y value (lower on page) comes first
+      }
+      return xA - xB; // Left-to-right
+    });
+  }
 
-    for (const fragment of fragments) {
-      const currentText = fragment.text.trim();
-      if (!currentText) continue;
+  /**
+   * Merges sorted TextItem objects into lines, creating a bounding box for each.
+   */
+  private mergeItemsIntoLines(
+    items: TextItemWithStyle[],
+    pageHeight: number,
+  ): ProcessedLine[] {
+    const lines: ProcessedLine[] = [];
+    if (items.length === 0) return lines;
 
-      if (fragment.position && lastX !== null && lastY !== null) {
-        const distance = Math.sqrt(
-          Math.pow(fragment.position.x - lastX, 2) +
-          Math.pow(fragment.position.y - lastY, 2)
-        );
+    let currentLineItems: TextItemWithStyle[] = [items[0]];
 
-        if (distance > 10) {
-          if (mergedText.endsWith('-')) {
-            mergedText = mergedText.slice(0, -1) + currentText;
-          } else {
-            mergedText += ' ' + currentText;
-          }
-        } else {
-          mergedText += currentText;
-        }
-        lastX = fragment.position.x + fragment.position.width;
-        lastY = fragment.position.y;
+    for (let i = 1; i < items.length; i++) {
+      const prev = items[i - 1];
+      const curr = items[i];
+
+      // Check if items are on the same line (Y-coordinate is similar)
+      if (Math.abs(curr.transform[5] - prev.transform[5]) < this.options.yTolerance) {
+        currentLineItems.push(curr);
       } else {
-        if (mergedText && !mergedText.endsWith('-')) {
-          mergedText += ' ';
+        // New line detected, process the previous one
+        if (currentLineItems.length > 0) {
+          lines.push(this.createLine(currentLineItems, pageHeight));
         }
-        mergedText += currentText;
+        currentLineItems = [curr];
       }
     }
-
-    return this.cleanupText(mergedText);
+    // Process the last line
+    if (currentLineItems.length > 0) {
+      lines.push(this.createLine(currentLineItems, pageHeight));
+    }
+    return lines;
   }
 
-  private cleanupText(text: string): string {
-    return text
-      .replace(/\s+/g, ' ')
-      .replace(/-\s+/g, '')
-      .replace(/\s+([,.!?;:])/g, '$1')
-      .replace(/([,.!?;:])\s+/g, '$1 ')
-      .replace(/\s+$/, '')
-      .replace(/^\s+/, '');
+  /**
+   * Creates a ProcessedLine object from a set of TextItems.
+   */
+  private createLine(items: TextItemWithStyle[], pageHeight: number): ProcessedLine {
+    const text = items.map((item) => item.str).join('');
+    const firstItem = items[0];
+    const lastItem = items[items.length - 1];
+
+    const x = firstItem.transform[4];
+    const y = pageHeight - firstItem.transform[5] - firstItem.height; // Convert to top-down coordinates
+    const width = lastItem.transform[4] + lastItem.width - x;
+    const height = Math.max(...items.map((item) => item.height));
+
+    const rect: PDFRect = { x, y, width, height };
+
+    return { text, rect, y: rect.y };
   }
 
-  private filterNoise(text: string): string {
-    const lines = text.split('\n');
-    const filteredLines = lines.filter(line => {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) return true;
+  /**
+   * Filters out lines that are likely headers, footers, or page numbers.
+   */
+  private filterNoiseLines(lines: ProcessedLine[]): ProcessedLine[] {
+    if (lines.length < 3) return lines;
 
-      if (this.options.pageNumberPattern.test(trimmedLine)) {
+    const contentHeight = lines[lines.length - 1].y - lines[0].y;
+    const headerThreshold = lines[0].y + contentHeight * 0.1;
+    const footerThreshold = lines[lines.length - 1].y - contentHeight * 0.1;
+
+    return lines.filter((line) => {
+      // Basic heuristic: filter lines that are short and in the top/bottom 10% of the page
+      const isShort = line.text.trim().length < this.options.noiseCharsThreshold;
+      const isHeader = line.y < headerThreshold && isShort;
+      const isFooter = line.y > footerThreshold && isShort;
+
+      // Filter out lines that look like a page number
+      if (/^\d+\s*$/.test(line.text.trim())) {
         return false;
       }
 
-      if (trimmedLine.length < 10 && this.options.headerFooterPattern.test(trimmedLine)) {
-        return false;
-      }
-
-      return true;
+      return !isHeader && !isFooter;
     });
-
-    return filteredLines.join('\n');
   }
 
-  private splitIntoSentences(text: string): string[] {
-    const sentences: string[] = [];
-    let currentSentence = '';
+  /**
+   * Assembles processed lines into sentences based on punctuation.
+   */
+  private assembleLinesIntoSentences(lines: ProcessedLine[]): ParsedSentence[] {
+    const sentences: ParsedSentence[] = [];
+    let sentenceId = 0;
+    let currentText = '';
+    let currentRects: PDFRect[] = [];
 
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      currentSentence += char;
+    const flushSentence = () => {
+      const cleanedText = this.cleanText(currentText);
+      if (cleanedText) {
+        sentences.push({
+          id: sentenceId++,
+          sourceText: cleanedText,
+          rects: [...currentRects],
+        });
+      }
+      currentText = '';
+      currentRects = [];
+    };
 
-      if (this.options.sentenceEndings.includes(char)) {
-        const trimmedSentence = currentSentence.trim();
-        if (trimmedSentence) {
-          sentences.push(trimmedSentence);
-          currentSentence = '';
-        }
+    for (const line of lines) {
+      if (!line.text.trim()) continue;
+
+      // Add space between lines, handling hyphenation
+      if (currentText && !currentText.endsWith('-')) {
+        currentText += ' ';
+      }
+      if (currentText.endsWith('-')) {
+        currentText = currentText.slice(0, -1);
+      }
+
+      currentText += line.text;
+      currentRects.push(line.rect);
+
+      const lastChar = line.text.trim().slice(-1);
+      if (this.options.sentenceEndings.includes(lastChar)) {
+        flushSentence();
       }
     }
 
-    const remaining = currentSentence.trim();
-    if (remaining) {
-      sentences.push(remaining);
+    // Flush any remaining text
+    if (currentText.trim()) {
+      flushSentence();
     }
 
-    return sentences.filter(sentence =>
-      !this.options.pageNumberPattern.test(sentence)
-    );
+    return sentences;
   }
 
-  static extractTextFragments(element: Element): TextFragment[] {
-    const fragments: TextFragment[] = [];
-    const spans = element.querySelectorAll('span[role="presentation"]');
-
-    spans.forEach(span => {
-      const text = span.textContent || '';
-      if (!text.trim()) return;
-
-      const rect = span.getBoundingClientRect();
-      const style = window.getComputedStyle(span);
-
-      fragments.push({
-        text: text,
-        style: {
-          color: style.color,
-          isBold: style.fontWeight === 'bold' || parseInt(style.fontWeight) > 500,
-          isItalic: style.fontStyle === 'italic',
-          fontSize: parseFloat(style.fontSize),
-          fontFamily: style.fontFamily
-        },
-        position: {
-          x: rect.left,
-          y: rect.top,
-          width: rect.width,
-          height: rect.height
-        }
-      });
-    });
-
-    return fragments;
+  /**
+   * Cleans up final sentence text.
+   */
+  private cleanText(text: string): string {
+    return text.replace(/\s+/g, ' ').trim();
   }
 }
-
-export function assembleSentences(
-  fragments: TextFragment[],
-  options?: SentenceAssemblyOptions
-): string[] {
-  const assembler = new PDFTextAssembler(options);
-  return assembler.assembleSentences(fragments);
-}
-
-export function extractAndAssembleSentences(
-  element: Element,
-  options?: SentenceAssemblyOptions
-): string[] {
-  const fragments = PDFTextAssembler.extractTextFragments(element);
-  return assembleSentences(fragments, options);
-}
-
-export type { TextFragment, TextStyle };

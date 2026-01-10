@@ -78,3 +78,28 @@ export interface WordDetails {
   meanings: string[];
   examples?: string[];
 }
+
+export interface PDFRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ParsedSentence {
+  id: number; // Unique Index (0, 1, 2...)
+  sourceText: string; // "Hello world." (for translation request)
+  rects: PDFRect[]; // Coordinates for highlighting (supports multi-line)
+}
+
+export interface HydratedSentence extends ParsedSentence {
+  translatedText: string | null; // Null before translation, filled after
+}
+
+export interface ParsedPageData {
+  pageNumber: number;
+  sentences: ParsedSentence[];
+}
+
+export * from './alert';
+export * from './translation';
