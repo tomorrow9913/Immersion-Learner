@@ -1,4 +1,5 @@
 import type { SentenceTranslation } from '@/types/translation';
+import { KeyedMutex } from './mutex';
 
 const DB_NAME = 'TranslationCache';
 const DB_VERSION = 4;
@@ -16,8 +17,7 @@ interface PageTranslationCache {
 
 class TranslationCacheDB {
   private db: IDBDatabase | null = null;
-  // [Fix] 페이지별 작업 큐 (Mutex 역할) - Key: `${docId}_${pageNumber}`
-  private pageOperations: Map<string, Promise<void>> = new Map();
+  private mutex = new KeyedMutex();
 
   async init(): Promise<void> {
     if (this.db) return;
@@ -46,31 +46,6 @@ class TranslationCacheDB {
     });
   }
 
-  private async performAtomicOperation<T>(
-    docId: string,
-    pageNumber: number,
-    operation: () => Promise<T>
-  ): Promise<T> {
-    const key = `${docId}_${pageNumber}`;
-    const previousOperation = this.pageOperations.get(key) || Promise.resolve();
-
-    const currentOperation = previousOperation.then(() => operation()).catch((err) => {
-      console.error(`Atomic operation failed for ${key}`, err);
-      throw err;
-    });
-
-    const operationCleanupPromise = currentOperation.then(() => { });
-    this.pageOperations.set(key, operationCleanupPromise);
-
-    operationCleanupPromise.finally(() => {
-      if (this.pageOperations.get(key) === operationCleanupPromise) {
-        this.pageOperations.delete(key);
-      }
-    });
-
-    return currentOperation;
-  }
-
   async getPageTranslation(docId: string, pageNumber: number): Promise<PageTranslationCache | null> {
     if (!docId) {
       console.warn('[TranslationCache] docId가 없어 조회를 건너뜁니다.');
@@ -78,7 +53,7 @@ class TranslationCacheDB {
     }
     if (!this.db) await this.init();
 
-    return new Promise((resolve, reject) => {
+    return this.mutex.runExclusive(`${docId}_${pageNumber}`, () => new Promise((resolve, reject) => {
       const transaction = this.db!.transaction([STORE_NAME], 'readonly');
       const store = transaction.objectStore(STORE_NAME);
       const request = store.get([docId, pageNumber]);
@@ -99,7 +74,7 @@ class TranslationCacheDB {
           resolve(result);
         }
       };
-    });
+    }));
   }
 
   async storeSentences(docId: string, sentences: SentenceTranslation[]): Promise<void> {
@@ -110,7 +85,7 @@ class TranslationCacheDB {
     if (sentences.length === 0) return;
     const pageNumber = sentences[0].pageNumber;
 
-    return this.performAtomicOperation(docId, pageNumber, async () => {
+    return this.mutex.runExclusive(`${docId}_${pageNumber}`, async () => {
       if (!this.db) await this.init();
 
       return new Promise<void>((resolve, reject) => {
@@ -163,7 +138,7 @@ class TranslationCacheDB {
       console.warn('[TranslationCache] docId가 없어 단일 문장 저장을 건너뜁니다.');
       return;
     }
-    return this.performAtomicOperation(docId, sentence.pageNumber, async () => {
+    return this.mutex.runExclusive(`${docId}_${sentence.pageNumber}`, async () => {
       if (!this.db) await this.init();
 
       return new Promise<void>((resolve, reject) => {
@@ -226,7 +201,7 @@ class TranslationCacheDB {
       console.warn('[TranslationCache] docId가 없어 삭제를 건너뜁니다.');
       return;
     }
-    return this.performAtomicOperation(docId, pageNumber, async () => {
+    return this.mutex.runExclusive(`${docId}_${pageNumber}`, async () => {
       if (!this.db) await this.init();
       return new Promise((resolve, reject) => {
         const transaction = this.db!.transaction([STORE_NAME], 'readwrite');
