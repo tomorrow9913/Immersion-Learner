@@ -23,6 +23,7 @@ export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps
 
   const loadPageAndTranslate = useCallback(
     async (pageNumber: number): Promise<PageData | undefined> => {
+      // Check cache first
       if (!pdf || cache.get(pageNumber)?.hydratedSentences) {
         return cache.get(pageNumber);
       }
@@ -33,9 +34,13 @@ export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps
       try {
         const page = await pdf.getPage(pageNumber);
 
-        // 1. Use the new assembler
+        // 1. Extract Text & Usage of PDFTextAssembler.assemblePageData
+        const textContent = await page.getTextContent();
+        const viewport = page.getViewport({ scale: 1 });
+        const items = textContent.items as any[]; // Type assertion for assembly
+
         const assembler = new PDFTextAssembler();
-        const parsedData = await assembler.processPage(page, pageNumber);
+        const parsedData = assembler.assemblePageData(items, viewport.height, pageNumber);
 
         // Update cache with parsed data first
         setCache((prev) =>
@@ -44,6 +49,7 @@ export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps
 
         // 2. Prepare Translation Request
         const sourceTexts = parsedData.sentences.map((s) => s.sourceText);
+
         if (sourceTexts.length === 0) {
           const emptyData: PageData = {
             parsedData,
@@ -54,6 +60,7 @@ export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps
           return emptyData;
         }
 
+        // 3. Request Translation
         const response = await chrome.runtime.sendMessage({
           type: MESSAGE_TYPES.GET_TRANSLATION_AND_DETAILS,
           text: sourceTexts.join('\n'), // API expects a single block of text
@@ -62,10 +69,12 @@ export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps
         if (response?.success) {
           // 4. Hydration & Safety Guard
           const translatedLines = (response.translatedText || '').split('\n');
+
           const hydratedSentences: HydratedSentence[] = parsedData.sentences.map(
             (sentence, idx) => ({
               ...sentence,
-              translatedText: translatedLines[idx] ?? null, // Fallback to null
+              // Use translated text, or fallback to source text if missing (Safety guard)
+              translatedText: translatedLines[idx] || sentence.sourceText,
             })
           );
 
@@ -84,8 +93,11 @@ export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps
         console.error(`Page ${pageNumber} error:`, err);
         const message = err instanceof Error ? err.message : String(err);
         setError(message);
+
+        // Even on error, we might want to show the original sentences? 
+        // For now, following standard error handling.
         const errorData: PageData = {
-          parsedData: { pageNumber, sentences: [] },
+          parsedData: { pageNumber, sentences: [] }, // Or keep partial?
           isLoading: false,
           error: message,
         };

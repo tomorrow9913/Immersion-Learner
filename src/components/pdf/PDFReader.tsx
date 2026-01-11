@@ -72,10 +72,10 @@ const PDFReader = () => {
     } = usePDFStorage();
 
     const {
-      currentPageData,
-      isTranslating,
-      error,
-      loadPageAndTranslate,
+        currentPageData,
+        isTranslating,
+        error,
+        loadPageAndTranslate,
     } = usePageTranslation({
         pdf: pdfDocument,
         currentPage: pageNumber,
@@ -225,7 +225,11 @@ const PDFReader = () => {
         window.location.reload();
     };
 
-    const sentences = currentPageData?.hydratedSentences || [];
+    // Use hydrated sentences if available, otherwise fallback to parsed sentences (with null translation)
+    // This allows hitboxes to render immediately (Req-5) before translation arrives.
+    const sentences = currentPageData?.hydratedSentences ||
+        (currentPageData?.parsedData?.sentences?.map(s => ({ ...s, translatedText: null })) as any[]) ||
+        [];
     const sentenceRefs = useRef<(HTMLDivElement | null)[]>([]);
 
     const handleSentenceHover = (id: number | null) => {
@@ -305,7 +309,7 @@ const PDFReader = () => {
                                                         className="max-w-full"
                                                     >
                                                         <HighlightingLayer
-                                                            sentences={currentPageData?.parsedData.sentences || []}
+                                                            sentences={sentences}
                                                             hoveredIndex={hoveredIndex}
                                                             onSentenceHover={handleSentenceHover}
                                                             scale={PDF_CONFIG.SCALE}

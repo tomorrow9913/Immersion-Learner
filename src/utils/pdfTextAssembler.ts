@@ -7,40 +7,27 @@ import type { PDFRect, ParsedPageData, ParsedSentence } from '../types';
 interface TextItemWithStyle extends TextItem {
   fontName: string;
   // `transform` is [scaleX, skewY, skewX, scaleY, x, y]
-}
-
-interface ProcessedLine {
-  text: string;
-  rect: PDFRect;
-  y: number;
+  transform: number[];
 }
 
 interface AssemblerOptions {
-  noiseCharsThreshold: number;
   yTolerance: number;
-  sentenceEndings: string[];
 }
 
 // --- Main Class ---
 
 export class PDFTextAssembler {
   private readonly options: AssemblerOptions;
+  // Regex for sentence splitting: Period/Exclamation/Question, optionally quote, then end of string
+  private readonly SENTENCE_SPLIT_REGEX = /[.?!]["']?\s*$/;
 
   constructor(options: Partial<AssemblerOptions> = {}) {
     this.options = {
-      noiseCharsThreshold: 10,
       yTolerance: 5,
-      sentenceEndings: ['.', '!', '?', '。', '！', '？'],
       ...options,
     };
   }
 
-  /**
-   * Main method to process a page's text content.
-   * @param page - The PDFPageProxy object from PDF.js.
-   * @param pageNumber - The 1-based index of the page.
-   * @returns A ParsedPageData object containing structured sentences.
-   */
   public async processPage(page: any, pageNumber: number): Promise<ParsedPageData> {
     const textContent = await page.getTextContent();
     const viewport = page.getViewport({ scale: 1 });
@@ -51,23 +38,25 @@ export class PDFTextAssembler {
 
     const items = textContent.items as TextItemWithStyle[];
 
-    // 1. Sort items into visual reading order
+    // Core Logic: Assemble Page Data
+    return this.assemblePageData(items, viewport.height, pageNumber);
+  }
+
+  public assemblePageData(items: TextItemWithStyle[], pageHeight: number, pageNumber: number): ParsedPageData {
+    // Step 1: Geometric Sorting (Visual Order)
     const sortedItems = this.sortItems(items);
 
-    // 2. Merge items into lines
-    const lines = this.mergeItemsIntoLines(sortedItems, viewport.height);
-
-    // 3. Filter out noise (headers, footers, page numbers)
-    const filteredLines = this.filterNoiseLines(lines);
-
-    // 4. Assemble lines into sentences
-    const sentences = this.assembleLinesIntoSentences(filteredLines);
+    // Step 2 & 3: Stitching & Segmentation
+    const sentences = this.stitchAndSegment(sortedItems, pageHeight);
 
     return { pageNumber, sentences };
   }
 
   /**
-   * Sorts TextItem objects by their visual position (top-to-bottom, left-to-right).
+   * Sorts TextItem objects by their visual position.
+   * Logic:
+   * 1. Compare Y coordinates. If diff > TOLERANCE, strictly Top-down (taking PDF coord system into account).
+   * 2. If Y diff <= TOLERANCE, Left-to-Right.
    */
   private sortItems(items: TextItemWithStyle[]): TextItemWithStyle[] {
     return [...items].sort((a, b) => {
@@ -76,145 +65,116 @@ export class PDFTextAssembler {
       const xA = a.transform[4];
       const xB = b.transform[4];
 
-      // Use a tolerance for Y-coordinate comparison
+      // Note: In PDF PDF coordinates (default), (0,0) is bottom-left.
+      // Larger Y means higher up on the page.
+      // So detailed comparison:
+      // If Abs(yA - yB) > Tolerance:
+      //   Sort Descending Y (Higher Y -> Top of page -> First in visual order)
       if (Math.abs(yA - yB) > this.options.yTolerance) {
-        return yB - yA; // Higher Y value (lower on page) comes first
+        return yB - yA;
       }
-      return xA - xB; // Left-to-right
+
+      // If roughly same line, Sort Ascending X (Left -> Right)
+      return xA - xB;
     });
   }
 
   /**
-   * Merges sorted TextItem objects into lines, creating a bounding box for each.
+   * Core "Stitching" Algorithm:
+   * Iterates through sorted items to build sentences.
+    * Line Merge: If Y diff > Tolerance, insert space.
+    * Sentence Split: If matches regex, flush.
    */
-  private mergeItemsIntoLines(
-    items: TextItemWithStyle[],
-    pageHeight: number,
-  ): ProcessedLine[] {
-    const lines: ProcessedLine[] = [];
-    if (items.length === 0) return lines;
-
-    let currentLineItems: TextItemWithStyle[] = [items[0]];
-
-    for (let i = 1; i < items.length; i++) {
-      const prev = items[i - 1];
-      const curr = items[i];
-
-      // Check if items are on the same line (Y-coordinate is similar)
-      if (Math.abs(curr.transform[5] - prev.transform[5]) < this.options.yTolerance) {
-        currentLineItems.push(curr);
-      } else {
-        // New line detected, process the previous one
-        if (currentLineItems.length > 0) {
-          lines.push(this.createLine(currentLineItems, pageHeight));
-        }
-        currentLineItems = [curr];
-      }
-    }
-    // Process the last line
-    if (currentLineItems.length > 0) {
-      lines.push(this.createLine(currentLineItems, pageHeight));
-    }
-    return lines;
-  }
-
-  /**
-   * Creates a ProcessedLine object from a set of TextItems.
-   */
-  private createLine(items: TextItemWithStyle[], pageHeight: number): ProcessedLine {
-    const text = items.map((item) => item.str).join(' ');
-    const firstItem = items[0];
-    const lastItem = items[items.length - 1];
-
-    const x = firstItem.transform[4];
-    const y = pageHeight - firstItem.transform[5] - firstItem.height; // Convert to top-down coordinates
-    const width = lastItem.transform[4] + lastItem.width - x;
-    const height = Math.max(...items.map((item) => item.height));
-
-    const rect: PDFRect = { x, y, width, height };
-
-    return { text, rect, y: rect.y };
-  }
-
-  /**
-   * Filters out lines that are likely headers, footers, or page numbers.
-   */
-  private filterNoiseLines(lines: ProcessedLine[]): ProcessedLine[] {
-    if (lines.length < 3) return lines;
-
-    const contentHeight = lines[lines.length - 1].y - lines[0].y;
-    const headerThreshold = lines[0].y + contentHeight * 0.1;
-    const footerThreshold = lines[lines.length - 1].y - contentHeight * 0.1;
-
-    return lines.filter((line) => {
-      // Basic heuristic: filter lines that are short and in the top/bottom 10% of the page
-      const isShort = line.text.trim().length < this.options.noiseCharsThreshold;
-      const isHeader = line.y < headerThreshold && isShort;
-      const isFooter = line.y > footerThreshold && isShort;
-
-      // Filter out lines that look like a page number
-      if (/^\d+\s*$/.test(line.text.trim())) {
-        return false;
-      }
-
-      return !isHeader && !isFooter;
-    });
-  }
-
-  /**
-   * Assembles processed lines into sentences based on punctuation.
-   */
-  private assembleLinesIntoSentences(lines: ProcessedLine[]): ParsedSentence[] {
+  private stitchAndSegment(items: TextItemWithStyle[], pageHeight: number): ParsedSentence[] {
     const sentences: ParsedSentence[] = [];
     let sentenceId = 0;
-    let currentText = '';
+
+    let currentSentenceText = '';
     let currentRects: PDFRect[] = [];
 
+    // Helper to flush current buffer
     const flushSentence = () => {
-      const cleanedText = this.cleanText(currentText);
-      if (cleanedText) {
+      if (currentSentenceText.trim().length > 0) {
         sentences.push({
           id: sentenceId++,
-          sourceText: cleanedText,
+          sourceText: currentSentenceText.trim(),
           rects: [...currentRects],
         });
       }
-      currentText = '';
+      currentSentenceText = '';
       currentRects = [];
     };
 
-    for (const line of lines) {
-      if (!line.text.trim()) continue;
+    for (let i = 0; i < items.length; i++) {
+      const curr = items[i];
+      const prev = i > 0 ? items[i - 1] : null;
 
-      // Add space between lines, handling hyphenation
-      if (currentText && !currentText.endsWith('-')) {
-        currentText += ' ';
+      // 1. Transform Coordinate (PDF -> Viewport Top-Left)
+      const rect = this.calculateRect(curr, pageHeight);
+
+      // 2. Line Merge Logic
+      if (prev) {
+        const prevY = prev.transform[5];
+        const currY = curr.transform[5];
+
+        const yDiff = Math.abs(prevY - currY);
+
+        // If Y difference is significant, it's a visual line break.
+        if (yDiff > this.options.yTolerance) {
+          // Spec: "True라면: currentSentenceText += " ". (줄바꿈을 공백으로 치환)"
+          // We check if we need to add space (avoid double spaces)
+          if (!currentSentenceText.endsWith(' ') && currentSentenceText.length > 0) {
+            currentSentenceText += ' ';
+          }
+        }
+        // Same line check for small X gaps (implicit in PDF str usually, but good for safety)
+        else {
+          const prevXEnd = prev.transform[4] + prev.width;
+          const currX = curr.transform[4];
+          // If there is a visible gap and no space, add one.
+          if (currX - prevXEnd > 5 && !currentSentenceText.endsWith(' ')) {
+            currentSentenceText += ' ';
+          }
+        }
       }
-      if (currentText.endsWith('-')) {
-        currentText = currentText.slice(0, -1);
-      }
 
-      currentText += line.text;
-      currentRects.push(line.rect);
+      // 3. Accumulate
+      currentSentenceText += curr.str;
+      currentRects.push(rect);
 
-      const lastChar = line.text.trim().slice(-1);
-      if (this.options.sentenceEndings.includes(lastChar)) {
+      // 4. Split Check (Regex)
+      // Check if the current buffer effectively ends a sentence?
+      // The Spec says: "텍스트 버퍼에 쌓인 문자열이 문장 종결 패턴과 일치할 때만 문장 객체를 생성"
+      // We check the whole accumulation so far.
+      if (this.SENTENCE_SPLIT_REGEX.test(currentSentenceText)) {
         flushSentence();
       }
     }
 
-    // Flush any remaining text
-    if (currentText.trim()) {
-      flushSentence();
-    }
+    // Flush remaining
+    flushSentence();
 
     return sentences;
   }
 
   /**
-   * Cleans up final sentence text.
+   * Converts a PDF TextItem to our standardized PDFRect (Top-Left Origin).
    */
-  private cleanText(text: string): string {
-    return text.replace(/\s+/g, ' ').trim();
+  private calculateRect(item: TextItemWithStyle, pageHeight: number): PDFRect {
+    const x = item.transform[4];
+    const pdfY = item.transform[5];
+    const width = item.width;
+    const height = item.height || (item.transform[0] || 10);
+
+    // Convert PDF Y (Bottom-Left) to Top-Left Y
+    // y_top = pageHeight - y_bottom - height
+    const top = pageHeight - pdfY - height;
+
+    return {
+      x,
+      y: top,
+      width,
+      height
+    };
   }
 }

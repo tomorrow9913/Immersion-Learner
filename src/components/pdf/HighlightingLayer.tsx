@@ -1,9 +1,9 @@
 import React, { memo } from 'react';
-import type { ParsedSentence } from '@/types';
+import type { HydratedSentence } from '@/types';
 
 interface HighlightingLayerProps {
   scale: number;
-  sentences: ParsedSentence[]; // Now using the shared type
+  sentences: HydratedSentence[];
   hoveredIndex: number | null;
   onSentenceHover: (sentenceId: number | null) => void;
   className?: string;
@@ -17,7 +17,7 @@ const HighlightedSentenceItem = memo(({
   onEnter,
   onLeave
 }: {
-  sentence: ParsedSentence;
+  sentence: HydratedSentence;
   scale: number;
   isHovered: boolean;
   onEnter: (id: number) => void;
@@ -25,7 +25,7 @@ const HighlightedSentenceItem = memo(({
 }) => {
   return (
     <>
-      {/* 1. Pre-calculated Overlay (Hitbox) */}
+      {/* 1. Pre-calculated Overlay (Hitbox) - Always processed for interaction */}
       {sentence.rects.map((rect, i) => (
         <div
           key={`hitbox-${sentence.id}-${i}`}
@@ -35,29 +35,30 @@ const HighlightedSentenceItem = memo(({
             top: `${rect.y * scale}px`,
             width: `${rect.width * scale}px`,
             height: `${rect.height * scale}px`,
-            cursor: 'text',
-            zIndex: 10, // Below selection but above PDF
-            // pointer-events: auto by default to catch hover.
-            // If user wants to select text behind, they might struggle unless we handle that.
-            // For now, per Req-4/5, we need it to catch hover.
+            // pointer-events: auto allows this to catch mouse events
+            pointerEvents: 'auto',
+            cursor: 'pointer',
+            zIndex: 10,
+            // Transparent, purely for hit detection
+            backgroundColor: 'transparent'
           }}
           onMouseEnter={() => onEnter(sentence.id)}
           onMouseLeave={onLeave}
         />
       ))}
 
-      {/* 2. Highlight Layer (Visual) */}
+      {/* 2. Highlight Layer (Visual) - Only when hovered */}
       {isHovered && sentence.rects.map((rect, i) => (
         <div
           key={`highlight-${sentence.id}-${i}`}
-          className="bg-yellow-300 mix-blend-multiply opacity-50"
+          className="bg-yellow-400 opacity-40 mix-blend-multiply"
           style={{
             position: 'absolute',
             left: `${rect.x * scale}px`,
             top: `${rect.y * scale}px`,
             width: `${rect.width * scale}px`,
             height: `${rect.height * scale}px`,
-            pointerEvents: 'none', // Visual only
+            pointerEvents: 'none', // Visual only, let events pass through to hitbox
             zIndex: 9
           }}
         />
@@ -73,11 +74,8 @@ const HighlightingLayer: React.FC<HighlightingLayerProps> = ({
   onSentenceHover,
   className = ''
 }) => {
-  // Use local state if needed, but props `hoveredIndex` should drive it for bi-directional.
-  // Actually, we need to inform parent when WE hover, so parent updates `hoveredIndex`.
-
   return (
-    <div className={`absolute inset-0 z-10 ${className}`}>
+    <div className={`absolute inset-0 z-10 pointer-events-none ${className}`}>
       {sentences.map((sentence) => (
         <HighlightedSentenceItem
           key={sentence.id}
