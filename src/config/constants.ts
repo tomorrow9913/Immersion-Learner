@@ -63,3 +63,23 @@ export const TABS = {
 
 // 탭 타입
 export type TabType = typeof TABS[keyof typeof TABS];
+
+// 번역 큐 설정
+export const QUEUE_CONFIG = {
+  MIN_DELAY_MS: 200,
+  FOUR_DAYS_MS: 4 * 24 * 60 * 60 * 1000
+} as const;
+
+// 네트워크 설정
+export const NETWORK_CONFIG = {
+  USER_AGENT: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+} as const;
+
+// 에러 메시지
+export const ERROR_MESSAGES = {
+  EXTENSION_CONTEXT_INVALIDATED: '확장 프로그램이 업데이트되었습니다. 페이지를 새로고침 해주세요.',
+  TRANSLATION_SERVICE_UNAVAILABLE: '번역 서비스를 사용할 수 없습니다.',
+  TRANSLATION_SERVICE_TEMPORARILY_UNAVAILABLE: '번역 서비스가 일시적으로 제한되었습니다.',
+  TRANSLATION_FAILED: '번역에 실패했습니다.',
+  SAVE_WORD_FAILED: '단어장 저장에 실패했습니다.'
+} as const;

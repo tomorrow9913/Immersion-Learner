@@ -3,9 +3,9 @@ import type {
   TranslationQueueStatus,
   SentenceTranslation 
 } from '@/types/translation';
+import { QUEUE_CONFIG } from '@/config/constants';
 
-const MIN_DELAY_MS = 200;
-const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000;
+const { MIN_DELAY_MS, FOUR_DAYS_MS } = QUEUE_CONFIG;
 
 class TranslationQueue {
   private queue: TranslationRequest[] = [];

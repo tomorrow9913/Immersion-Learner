@@ -1,4 +1,5 @@
 import { fetchWithRetry } from '@/utils/retry';
+import { API_ENDPOINTS, ERROR_MESSAGES, NETWORK_CONFIG } from '@/config/constants';
 
 type GoogleTranslateSentence = [
   string,
@@ -77,10 +78,10 @@ export async function translateText(text: string, targetLang = 'ko'): Promise<st
 
   try {
     const response = await fetchWithRetry(
-      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`,
+      `${API_ENDPOINTS.GOOGLE_TRANSLATE}?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`,
       {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          'User-Agent': NETWORK_CONFIG.USER_AGENT
         }
       }
     );
@@ -89,7 +90,7 @@ export async function translateText(text: string, targetLang = 'ko'): Promise<st
 
     if (rawData.trim().startsWith('<')) {
       console.error('API Error (HTML received):', rawData.substring(0, 100));
-      throw new Error('번역 서비스가 일시적으로 제한되었습니다.');
+      throw new Error(ERROR_MESSAGES.TRANSLATION_SERVICE_TEMPORARILY_UNAVAILABLE);
     }
 
     let data: unknown;
@@ -124,7 +125,7 @@ export async function translateText(text: string, targetLang = 'ko'): Promise<st
   } catch (error) {
     console.error('번역 API 처리 중 오류 발생:', error);
     if (error instanceof Error) throw error;
-    throw new Error('번역에 실패했습니다.');
+    throw new Error(ERROR_MESSAGES.TRANSLATION_FAILED);
   }
 }
 
@@ -135,7 +136,7 @@ export async function getDictionaryData(word: string): Promise<DictionaryResult 
 
   try {
     const response = await fetchWithRetry(
-      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`
+      `${API_ENDPOINTS.DICTIONARY_API}/${encodeURIComponent(word)}`
     );
 
     if (!response.ok) {

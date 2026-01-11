@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { UI_CONFIG, MESSAGE_TYPES } from '@/config/constants';
+import { UI_CONFIG, MESSAGE_TYPES, ERROR_MESSAGES } from '@/config/constants';
 import type { WordDetails } from '@/types';
 
 interface TranslationData {
@@ -73,7 +73,7 @@ export const useTranslation = () => {
 
     try {
       if (!chrome.runtime?.id) {
-        throw new Error('확장 프로그램이 업데이트되었습니다. 페이지를 새로고침 해주세요.');
+        throw new Error(ERROR_MESSAGES.EXTENSION_CONTEXT_INVALIDATED);
       }
 
       const response = await chrome.runtime.sendMessage({
@@ -82,7 +82,7 @@ export const useTranslation = () => {
       });
 
       if (chrome.runtime.lastError) {
-        throw new Error(chrome.runtime.lastError.message || '번역 서비스를 사용할 수 없습니다.');
+        throw new Error(chrome.runtime.lastError.message || ERROR_MESSAGES.TRANSLATION_SERVICE_UNAVAILABLE);
       }
 
       if (response?.success) {
@@ -105,11 +105,11 @@ export const useTranslation = () => {
           isTranslating: false,
         });
       } else {
-        throw new Error(response?.error || '번역에 실패했습니다.');
+        throw new Error(response?.error || ERROR_MESSAGES.TRANSLATION_FAILED);
       }
     } catch (error) {
       console.error('번역 중 오류 발생:', error);
-      const errorMessage = error instanceof Error ? error.message : '번역 서비스를 사용할 수 없습니다.';
+      const errorMessage = error instanceof Error ? error.message : ERROR_MESSAGES.TRANSLATION_SERVICE_UNAVAILABLE;
       const errorType = errorMessage.includes('확장 프로그램') ? 'context_invalidated' : 'default';
       
       updateState({
@@ -159,14 +159,13 @@ export const useTranslation = () => {
           resetTranslation();
         }, UI_CONFIG.WORD_SAVE_SUCCESS_DURATION);
       } else {
-        throw new Error(response.error || '단어장 저장에 실패했습니다.');
+        throw new Error(response.error || ERROR_MESSAGES.SAVE_WORD_FAILED);
       }
     } catch (error) {
       console.error('단어장 저장 중 오류 발생:', error);
       // Optionally, update state to show error message to user
     }
   }, [updateState, resetTranslation]);
-
   const setSelectedText = useCallback((text: string) => {
     updateState({ selectedText: text });
   }, [updateState]);
