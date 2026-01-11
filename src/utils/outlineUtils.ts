@@ -1,5 +1,6 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { OutlineItem } from '@/types';
+import { Logger } from './logger';
 
 type Ref = any;
 type PdfJsOutlineDestination = [Ref, { name: string }, ...any[]];
@@ -31,7 +32,7 @@ export const processOutlineWithPageNumbers = async (
         pageNumber = pageIndex + 1;
       }
     } catch (e) {
-      console.warn('Failed to resolve page number for outline item:', item.title, e);
+      Logger.warn('Failed to resolve page number for outline item:', item.title, e);
     }
     
     const processedItem: OutlineItem = {
@@ -59,7 +60,7 @@ export const extractOutlineDirectly = async (pdf: PDFDocumentProxy): Promise<Out
       return [];
     }
   } catch (error) {
-    console.error('Failed to extract outline:', error);
+    Logger.warn('Failed to extract outline:', error);
     return [];
   }
 };

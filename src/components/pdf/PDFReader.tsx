@@ -19,6 +19,7 @@ import { FileDropArea, MultiStackAlert } from '@/components/common';
 import { TranslationPopup } from '../';
 
 import alertService from '@/services/AlertService';
+import { Logger } from '@/utils/logger';
 
 pdfjs.GlobalWorkerOptions.workerSrc = PDF_CONFIG.WORKER_SRC;
 
@@ -88,7 +89,7 @@ const PDFReader = () => {
         const pdfUrl = urlParams.get('pdf');
 
         if (pdfUrl) {
-            console.log('PDF URL parameter detected:', pdfUrl);
+            Logger.debug('PDF URL parameter detected:', pdfUrl);
         }
 
         loadRecentFiles();
@@ -122,8 +123,7 @@ const PDFReader = () => {
     };
 
     const onDocumentLoadError = (error: Error) => {
-        console.error('PDF loading error:', error);
-        addAlert(`PDF 로딩 실패: ${error.message}\n파일이 손상되지 않았는지 확인해주세요.`, 'destructive');
+        Logger.error(`PDF 로딩 실패: ${error.message}\n파일이 손상되지 않았는지 확인해주세요.`);
     };
 
     const handleOutlineClick = async (dest: OutlineDestination | string, _title: string, pageNumber?: number) => {
@@ -141,13 +141,13 @@ const PDFReader = () => {
                         const page = await pdfDocument.getPageIndex(namedDest[0]);
                         targetPage = page + 1;
                     } else {
-                        console.warn(`Named destination "${dest}" not found.`);
+                        Logger.warn(`Named destination "${dest}" not found.`);
                     }
                 } catch (error) {
-                    console.error('Error resolving named destination:', error);
+                    Logger.warn('Error resolving named destination:', error);
                 }
             } else {
-                console.warn('PDF document not loaded, cannot resolve named destination.');
+                Logger.warn('PDF document not loaded, cannot resolve named destination.');
             }
         }
 
@@ -155,7 +155,7 @@ const PDFReader = () => {
             setPageNumber(targetPage);
             updateLastPage(file, targetPage);
         } else {
-            console.warn('Could not determine target page for outline item.');
+            Logger.warn('Could not determine target page for outline item.');
         }
     };
 

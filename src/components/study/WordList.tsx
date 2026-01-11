@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Logger } from '@/utils/logger';
 
 const WordList = () => {
   const [words, setWords] = useState<Word[]>([]);
@@ -39,7 +40,7 @@ const WordList = () => {
 
   const playAudio = (audioUrl?: string) => {
     if (audioUrl) {
-      new Audio(audioUrl).play().catch(console.error);
+      new Audio(audioUrl).play().catch(Logger.warn);
     }
   };
 

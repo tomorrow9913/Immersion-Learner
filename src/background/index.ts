@@ -1,5 +1,6 @@
 import { translateText, getDictionaryData } from '@/services/ApiService';
 import { MESSAGE_TYPES } from '@/config/constants';
+import { Logger } from '@/utils/logger';
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -21,7 +22,7 @@ async function processSaveQueue() {
   try {
     await saveOperation?.();
   } catch (error) {
-    console.error('Save operation failed:', error);
+    Logger.warn('Save operation failed:', error);
   } finally {
     isSaving = false;
     processSaveQueue();
@@ -44,7 +45,7 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
         enqueueSave(selectedText, translatedText);
       }
     } catch (err) {
-      console.error('단어장 추가 중 번역 오류:', err);
+      Logger.warn('단어장 추가 중 번역 오류:', err);
     }
   }
 });
@@ -52,7 +53,7 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
 async function saveToWordbook(original: string, translated: string) {
   const { words = [] }: { words: any[] } = await chrome.storage.local.get('words');
   if (words.some((w: any) => w.original === original)) {
-    console.log('단어가 이미 존재합니다:', original);
+    Logger.debug('단어가 이미 존재합니다:', original);
     return;
   }
 
@@ -72,12 +73,12 @@ async function saveToWordbook(original: string, translated: string) {
 
   const { words: currentWords = [] }: { words: any[] } = await chrome.storage.local.get('words');
   if (currentWords.some((w: any) => w.original === original)) {
-    console.log('단어가 이미 존재합니다 (재확인):', original);
+    Logger.debug('단어가 이미 존재합니다 (재확인):', original);
     return;
   }
 
   await chrome.storage.local.set({ words: [...currentWords, newWord] });
-  console.log('단어 저장 성공:', original);
+  Logger.debug('단어 저장 성공:', original);
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -98,7 +99,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sendResponse({ success: true, translatedText });
       }
     } catch (error) {
-      console.error('메시지 처리 중 오류 발생:', error);
+      Logger.error('메시지 처리 중 오류 발생:', error);
       sendResponse({ success: false, error: error instanceof Error ? error.message : '알 수 없는 오류' });
     }
   };

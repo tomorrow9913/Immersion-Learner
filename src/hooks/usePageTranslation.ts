@@ -4,6 +4,7 @@ import { MESSAGE_TYPES } from '@/config/constants';
 import type { ParsedPageData, HydratedSentence, SentenceTranslation } from '@/types';
 import { PDFTextAssembler } from '@/utils/pdfTextAssembler';
 import { translationCache } from '@/utils/translationCache';
+import { Logger } from '@/utils/logger';
 
 interface PageData {
   parsedData: ParsedPageData;
@@ -129,7 +130,7 @@ export const usePageTranslation = ({ pdf, currentPage, docId }: UsePageTranslati
           throw new Error(response?.error || `Page ${pageNumber} translation failed.`);
         }
       } catch (err) {
-        console.error(`Page ${pageNumber} error:`, err);
+        Logger.warn(`Page ${pageNumber} error:`, err);
         const message = err instanceof Error ? err.message : String(err);
         setError(message);
 

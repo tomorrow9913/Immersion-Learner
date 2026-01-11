@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Volume2, Check, BookOpen, RefreshCw, X } from 'lucide-react';
 import type { WordDetails } from '@/types';
+import { Logger } from '@/utils/logger';
 
 interface TranslationPopupProps {
   selectedText: string;
@@ -121,7 +122,7 @@ const TranslationPopup = forwardRef<HTMLDivElement, TranslationPopupProps>(({
                           size="sm"
                           onClick={(e) => { 
                             e.stopPropagation(); 
-                            new Audio(wordDetails.audioUrl).play().catch(console.error); 
+                            new Audio(wordDetails.audioUrl).play().catch(Logger.warn); 
                           }}
                           className="p-1 h-6 w-6"
                         >

@@ -1,3 +1,5 @@
+import { Logger } from './logger';
+
 export async function fetchWithRetry(
   url: string, 
   options: RequestInit = {}, 
@@ -17,7 +19,7 @@ export async function fetchWithRetry(
     return response;
   } catch (err) {
     if (retries > 0) {
-      console.warn(`Retrying... attempts left: ${retries}, error:`, err);
+      Logger.warn(`Retrying... attempts left: ${retries}, error:`, err);
       await new Promise(resolve => setTimeout(resolve, delay));
       return fetchWithRetry(url, options, retries - 1, delay * 2);
     }

@@ -81,5 +81,10 @@ export const ERROR_MESSAGES = {
   TRANSLATION_SERVICE_UNAVAILABLE: '번역 서비스를 사용할 수 없습니다.',
   TRANSLATION_SERVICE_TEMPORARILY_UNAVAILABLE: '번역 서비스가 일시적으로 제한되었습니다.',
   TRANSLATION_FAILED: '번역에 실패했습니다.',
+  TRANSLATION_FAILED_OR_EMPTY: '번역 실패 또는 빈 응답',
+  EMPTY_TEXT_TO_TRANSLATE: '번역할 텍스트가 비어있습니다.',
+  TRANSLATION_RESPONSE_PARSE_FAILED: '번역 서비스 응답 파싱에 실패했습니다.',
+  TRANSLATION_EMPTY_RESULT: '번역 결과가 비어있습니다.',
+  INVALID_RESPONSE_FORMAT: '잘못된 응답 형식입니다.',
   SAVE_WORD_FAILED: '단어장 저장에 실패했습니다.'
 } as const;

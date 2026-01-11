@@ -5,6 +5,7 @@ import { TABS, type TabType } from '@/config/constants';
 import { WordList, FlashCardMode, QuizMode } from '@/components/study';
 import { PDFReader } from '@/components/pdf';
 import { ErrorFallback } from '@/components/common';
+import { Logger } from '@/utils/logger';
 
 const App = () => {
   const [activeTab, setActiveTab] = useState<TabType>(TABS.FLASHCARD);
@@ -49,7 +50,7 @@ const App = () => {
         <ErrorBoundary
           FallbackComponent={ErrorFallback}
           resetKeys={[activeTab]}
-          onReset={() => console.log(`Resetting tab: ${activeTab}`)}
+          onReset={() => Logger.debug(`Resetting tab: ${activeTab}`)}
         >
           {getComponent(TAB_CONFIG.find(tab => tab.id === activeTab)?.componentName || '')}
         </ErrorBoundary>

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import type { Word } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Volume2, ArrowRight, RotateCcw } from 'lucide-react';
+import { Logger } from '@/utils/logger';
 
 const FlashCardMode = () => {
     const [words, setWords] = useState<Word[]>([]);
@@ -66,7 +67,7 @@ const FlashCardMode = () => {
     const playAudio = useCallback((audioUrl?: string) => {
         if (audioUrl) {
             const audio = new Audio(audioUrl);
-            audio.play().catch(console.error);
+            audio.play().catch(Logger.warn);
         }
     }, []);
 

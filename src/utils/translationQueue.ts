@@ -3,7 +3,7 @@ import type {
   TranslationQueueStatus,
   SentenceTranslation 
 } from '@/types/translation';
-import { QUEUE_CONFIG } from '@/config/constants';
+import { QUEUE_CONFIG, ERROR_MESSAGES } from '@/config/constants';
 
 const { MIN_DELAY_MS, FOUR_DAYS_MS } = QUEUE_CONFIG;
 
@@ -98,7 +98,7 @@ class TranslationQueue {
       });
 
       if (!response?.success || !response?.translatedText?.trim()) {
-        throw new Error(response?.error || '번역 실패 또는 빈 응답');
+        throw new Error(response?.error || ERROR_MESSAGES.TRANSLATION_FAILED_OR_EMPTY);
       }
 
       const [pageNumberStr, sentenceIndexStr] = request.id.split('-').slice(0, 2);

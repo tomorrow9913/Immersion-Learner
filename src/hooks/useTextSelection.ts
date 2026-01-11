@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { UI_CONFIG } from '@/config/constants';
+import { Logger } from '@/utils/logger';
 
 interface TextSelectionState {
   selection: { text: string; range: Range | null };
@@ -80,7 +81,7 @@ export const useTextSelection = (onSelectionCleared?: () => void) => {
             popupPosition: calculatePopupPosition(rect),
           });
         } catch (error) {
-          console.error('Failed to process selection:', error);
+          Logger.warn('Failed to process selection:', error);
           clearSelection();
         }
       } else {

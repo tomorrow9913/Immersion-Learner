@@ -1,5 +1,6 @@
 import { fetchWithRetry } from '@/utils/retry';
 import { API_ENDPOINTS, ERROR_MESSAGES, NETWORK_CONFIG } from '@/config/constants';
+import { Logger } from '@/utils/logger';
 
 type GoogleTranslateSentence = [
   string,
@@ -73,7 +74,7 @@ function isDictionaryData(data: unknown): data is DictionaryEntry[] {
 
 export async function translateText(text: string, targetLang = 'ko'): Promise<string> {
   if (!text || text.trim().length === 0) {
-    throw new Error('번역할 텍스트가 비어있습니다.');
+    throw new Error(ERROR_MESSAGES.EMPTY_TEXT_TO_TRANSLATE);
   }
 
   try {
@@ -89,7 +90,7 @@ export async function translateText(text: string, targetLang = 'ko'): Promise<st
     const rawData = await response.text();
 
     if (rawData.trim().startsWith('<')) {
-      console.error('API Error (HTML received):', rawData.substring(0, 100));
+      Logger.warn('API Error (HTML received):', rawData.substring(0, 100));
       throw new Error(ERROR_MESSAGES.TRANSLATION_SERVICE_TEMPORARILY_UNAVAILABLE);
     }
 
@@ -97,8 +98,8 @@ export async function translateText(text: string, targetLang = 'ko'): Promise<st
     try {
       data = JSON.parse(rawData);
     } catch (parseError) {
-      console.error('JSON parse error:', parseError);
-      throw new Error('번역 서비스 응답 파싱에 실패했습니다.');
+      Logger.warn('JSON parse error:', parseError);
+      throw new Error(ERROR_MESSAGES.TRANSLATION_RESPONSE_PARSE_FAILED);
     }
 
     // [수정 3] 파싱 로직 변경
@@ -108,22 +109,22 @@ export async function translateText(text: string, targetLang = 'ko'): Promise<st
         .filter(Boolean)
         .join('');
 
-      console.log('Translation result:', {
+      Logger.debug('Translation result:', {
         originalText: text,
         translatedText,
         isEmpty: !translatedText.trim()
       });
 
       if (!translatedText.trim()) {
-        throw new Error('번역 결과가 비어있습니다.');
+        throw new Error(ERROR_MESSAGES.TRANSLATION_EMPTY_RESULT);
       }
       return translatedText;
     }
 
-    console.warn('Unknown format:', data);
-    throw new Error('잘못된 응답 형식입니다.');
+    Logger.warn('Unknown format:', data);
+    throw new Error(ERROR_MESSAGES.INVALID_RESPONSE_FORMAT);
   } catch (error) {
-    console.error('번역 API 처리 중 오류 발생:', error);
+    Logger.warn('번역 API 처리 중 오류 발생:', error);
     if (error instanceof Error) throw error;
     throw new Error(ERROR_MESSAGES.TRANSLATION_FAILED);
   }
@@ -152,7 +153,7 @@ export async function getDictionaryData(word: string): Promise<DictionaryResult 
     try {
       data = JSON.parse(rawData);
     } catch (parseError) {
-      console.error('Dictionary API JSON parse error:', parseError);
+      Logger.warn('Dictionary API JSON parse error:', parseError);
       return null;
     }
 
@@ -177,7 +178,7 @@ export async function getDictionaryData(word: string): Promise<DictionaryResult 
       };
     }
   } catch (error) {
-    console.error('사전 API 처리 중 오류 발생:', error);
+    Logger.warn('사전 API 처리 중 오류 발생:', error);
   }
   return null;
 }

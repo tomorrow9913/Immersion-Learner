@@ -1,5 +1,6 @@
 import type { SentenceTranslation } from '@/types/translation';
 import { KeyedMutex } from './mutex';
+import { Logger } from './logger';
 
 const DB_NAME = 'TranslationCache';
 const DB_VERSION = 4;
@@ -48,7 +49,7 @@ class TranslationCacheDB {
 
   async getPageTranslation(docId: string, pageNumber: number): Promise<PageTranslationCache | null> {
     if (!docId) {
-      console.warn('[TranslationCache] docId가 없어 조회를 건너뜁니다.');
+      Logger.warn('[TranslationCache] docId가 없어 조회를 건너뜁니다.');
       return null;
     }
     if (!this.db) await this.init();
@@ -59,7 +60,7 @@ class TranslationCacheDB {
       const request = store.get([docId, pageNumber]);
 
       request.onerror = () => {
-        console.error('[TranslationCache] 조회 실패:', request.error);
+        Logger.warn('[TranslationCache] 조회 실패:', request.error);
         reject(request.error);
       };
       request.onsuccess = () => {
@@ -79,7 +80,7 @@ class TranslationCacheDB {
 
   async storeSentences(docId: string, sentences: SentenceTranslation[]): Promise<void> {
     if (!docId) {
-      console.warn('[TranslationCache] docId가 없어 저장을 건너뜁니다.');
+      Logger.warn('[TranslationCache] docId가 없어 저장을 건너뜁니다.');
       return;
     }
     if (sentences.length === 0) return;
@@ -95,7 +96,7 @@ class TranslationCacheDB {
         const getRequest = store.get([docId, pageNumber]);
 
         getRequest.onerror = () => {
-          console.error('[TranslationCache] 조회 실패:', getRequest.error);
+          Logger.warn('[TranslationCache] 조회 실패:', getRequest.error);
           reject(getRequest.error);
         };
         getRequest.onsuccess = () => {
@@ -121,11 +122,11 @@ class TranslationCacheDB {
 
           const putRequest = store.put(cache);
           putRequest.onerror = () => {
-            console.error('[TranslationCache] 저장 실패:', putRequest.error);
+            Logger.warn('[TranslationCache] 저장 실패:', putRequest.error);
             reject(putRequest.error);
           };
           putRequest.onsuccess = () => {
-            console.log(`[TranslationCache] 저장 성공: ${docId} (Page ${pageNumber})`);
+            Logger.debug(`[TranslationCache] 저장 성공: ${docId} (Page ${pageNumber})`);
             resolve();
           };
         };
@@ -135,7 +136,7 @@ class TranslationCacheDB {
 
   async storeSentence(docId: string, sentence: SentenceTranslation): Promise<void> {
     if (!docId) {
-      console.warn('[TranslationCache] docId가 없어 단일 문장 저장을 건너뜁니다.');
+      Logger.warn('[TranslationCache] docId가 없어 단일 문장 저장을 건너뜁니다.');
       return;
     }
     return this.mutex.runExclusive(`${docId}_${sentence.pageNumber}`, async () => {
@@ -148,7 +149,7 @@ class TranslationCacheDB {
         const readRequest = store.get([docId, sentence.pageNumber]);
 
         readRequest.onerror = () => {
-          console.error('[TranslationCache] 조회 실패 (Single):', readRequest.error);
+          Logger.warn('[TranslationCache] 조회 실패 (Single):', readRequest.error);
           reject(readRequest.error);
         };
 
@@ -184,11 +185,11 @@ class TranslationCacheDB {
           const writeRequest = store.put(cache);
 
           writeRequest.onerror = () => {
-            console.error('[TranslationCache] 문장 저장 실패:', writeRequest.error);
+            Logger.warn('[TranslationCache] 문장 저장 실패:', writeRequest.error);
             reject(writeRequest.error);
           };
           writeRequest.onsuccess = () => {
-            console.log(`[TranslationCache] 문장 저장 성공: ${docId}, p${sentence.pageNumber}, s${sentence.sentenceIndex}`);
+            Logger.debug(`[TranslationCache] 문장 저장 성공: ${docId}, p${sentence.pageNumber}, s${sentence.sentenceIndex}`);
             resolve();
           };
         };
@@ -198,7 +199,7 @@ class TranslationCacheDB {
 
   async deletePageTranslation(docId: string, pageNumber: number): Promise<void> {
     if (!docId) {
-      console.warn('[TranslationCache] docId가 없어 삭제를 건너뜁니다.');
+      Logger.warn('[TranslationCache] docId가 없어 삭제를 건너뜁니다.');
       return;
     }
     return this.mutex.runExclusive(`${docId}_${pageNumber}`, async () => {
@@ -208,11 +209,11 @@ class TranslationCacheDB {
         const store = transaction.objectStore(STORE_NAME);
         const request = store.delete([docId, pageNumber]);
         request.onerror = () => {
-          console.error('[TranslationCache] 삭제 실패:', request.error);
+          Logger.warn('[TranslationCache] 삭제 실패:', request.error);
           reject(request.error);
         };
         request.onsuccess = () => {
-          console.log(`[TranslationCache] 삭제 성공: ${docId} (Page ${pageNumber})`);
+          Logger.debug(`[TranslationCache] 삭제 성공: ${docId} (Page ${pageNumber})`);
           resolve();
         };
       });

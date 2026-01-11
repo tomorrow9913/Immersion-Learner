@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { UI_CONFIG, MESSAGE_TYPES, ERROR_MESSAGES } from '@/config/constants';
 import type { WordDetails } from '@/types';
+import { Logger } from '@/utils/logger';
 
 interface TranslationData {
   translation: string;
@@ -108,7 +109,7 @@ export const useTranslation = () => {
         throw new Error(response?.error || ERROR_MESSAGES.TRANSLATION_FAILED);
       }
     } catch (error) {
-      console.error('번역 중 오류 발생:', error);
+      Logger.warn('번역 중 오류 발생:', error);
       const errorMessage = error instanceof Error ? error.message : ERROR_MESSAGES.TRANSLATION_SERVICE_UNAVAILABLE;
       const errorType = errorMessage.includes('확장 프로그램') ? 'context_invalidated' : 'default';
       
@@ -134,7 +135,7 @@ export const useTranslation = () => {
 
   const addToWordbook = useCallback(async (text: string, translatedText: string) => {
     if (!chrome.runtime?.id) {
-      console.warn('Chrome runtime ID not available. Cannot save to wordbook.');
+      Logger.warn('Chrome runtime ID not available. Cannot save to wordbook.');
       return;
     }
 
@@ -162,7 +163,7 @@ export const useTranslation = () => {
         throw new Error(response.error || ERROR_MESSAGES.SAVE_WORD_FAILED);
       }
     } catch (error) {
-      console.error('단어장 저장 중 오류 발생:', error);
+      Logger.warn('단어장 저장 중 오류 발생:', error);
       // Optionally, update state to show error message to user
     }
   }, [updateState, resetTranslation]);

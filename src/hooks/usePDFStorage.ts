@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { RecentFile } from '@/types';
 import { saveFileToDB, getFileFromDB, deleteFileFromDB } from '@/utils/pdfStorage';
+import { Logger } from '@/utils/logger';
 
 // 최근 파일 목록 관리 전용 훅
 const useRecentFilesList = () => {
@@ -13,7 +14,7 @@ const useRecentFilesList = () => {
         const files: RecentFile[] = (result.recentFiles as RecentFile[]) || [];
         setRecentFiles(files);
       } catch (error) {
-        console.error('Failed to load recent files:', error);
+        Logger.error('Failed to load recent files:', error);
       }
     }
   }, []);
@@ -54,7 +55,7 @@ const useFileDataCRUD = () => {
       if (typeof file === "string") throw new Error("Cannot save string as file data");
       await saveFileToDB(fileId, file);
     } catch (error) {
-      console.error('Failed to save file to IndexedDB:', error);
+      Logger.error('Failed to save file to IndexedDB:', error);
       throw error;
     }
   }, []);
@@ -63,7 +64,7 @@ const useFileDataCRUD = () => {
     try {
       return await getFileFromDB(fileId);
     } catch (error) {
-      console.error('Failed to get file from IndexedDB:', error);
+      Logger.error('Failed to get file from IndexedDB:', error);
       return null;
     }
   }, []);
@@ -72,7 +73,7 @@ const useFileDataCRUD = () => {
     try {
       await deleteFileFromDB(fileId);
     } catch (error) {
-      console.error('Failed to delete file from IndexedDB:', error);
+      Logger.error('Failed to delete file from IndexedDB:', error);
       throw error;
     }
   }, []);
@@ -144,15 +145,14 @@ export const usePDFStorage = () => {
         await chrome.storage.local.set({ recentFiles: newFilesForStorage });
 
       } catch (error) {
-        console.error('Failed to save recent file:', error);
-        alert('최근 파일 저장 실패: ' + (error instanceof Error ? error.message : String(error)));
+        Logger.error('Failed to save recent file:', error);
       }
     }
   }, [recentFiles.actions.addRecentFile, fileCRUD.actions.saveFile]);
 
   const openRecentFile = useCallback(async (recentFile: RecentFile): Promise<File | string | Blob | null> => {
     try {
-      console.log('Opening recent file:', recentFile.name);
+      Logger.debug('Opening recent file:', recentFile.name);
 
       let fileBlob = await fileCRUD.actions.getFile(recentFile.id);
 
@@ -169,16 +169,15 @@ export const usePDFStorage = () => {
 
         return fileBlob;
       } else if (recentFile.dataUrl) {
-        console.log('Loaded from legacy dataUrl');
+        Logger.debug('Loaded from legacy dataUrl');
         return recentFile.dataUrl;
       } else {
-        alert('파일 내용을 찾을 수 없습니다. 다시 열어주세요.');
+        Logger.error('파일 내용을 찾을 수 없습니다. 다시 열어주세요.');
         await recentFiles.actions.removeRecentFile(recentFile.id);
         return null;
       }
     } catch (error) {
-      console.error('Failed to open recent file:', error);
-      alert(`파일을 열 수 없습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
+      Logger.error(`파일을 열 수 없습니다: ${error instanceof Error ? error.message : '알 수 없는 오류'}`);
       return null;
     }
   }, [recentFiles.actions.updateRecentFile, fileCRUD.actions.getFile, recentFiles.actions.removeRecentFile]);
@@ -195,7 +194,7 @@ export const usePDFStorage = () => {
 
         await chrome.storage.local.set({ recentFiles: newFilesForStorage });
       } catch (error) {
-        console.error('Failed to remove recent file:', error);
+        Logger.error('Failed to remove recent file:', error);
       }
     }
   }, [recentFiles.actions.removeRecentFile, fileCRUD.actions.deleteFile]);
@@ -221,7 +220,7 @@ export const usePDFStorage = () => {
           }
         }
       } catch (error) {
-        console.error('Failed to update last page:', error);
+        Logger.error('Failed to update last page:', error);
       }
     }
   }, [recentFiles.actions.updateRecentFile]);
