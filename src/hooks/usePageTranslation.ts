@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { MESSAGE_TYPES } from '@/config/constants';
 import type { ParsedPageData, HydratedSentence } from '@/types';
+import type { SentenceTranslation } from '@/types/translation';
 import { PDFTextAssembler } from '@/utils/pdfTextAssembler';
+import { translationCache } from '@/utils/translationCache';
 
 interface PageData {
   parsedData: ParsedPageData;
@@ -23,7 +25,7 @@ export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps
 
   const loadPageAndTranslate = useCallback(
     async (pageNumber: number): Promise<PageData | undefined> => {
-      // Check cache first
+      // Check in-memory cache first
       if (!pdf || cache.get(pageNumber)?.hydratedSentences) {
         return cache.get(pageNumber);
       }
@@ -33,6 +35,13 @@ export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps
 
       try {
         const page = await pdf.getPage(pageNumber);
+        const fingerprint = (pdf as any).fingerprint;
+
+        // 1. Check persistent cache
+        let cachedTranslation = null;
+        if (fingerprint) {
+          cachedTranslation = await translationCache.getPageTranslation(fingerprint, pageNumber);
+        }
 
         // 1. Extract Text & Usage of PDFTextAssembler.assemblePageData
         const textContent = await page.getTextContent();
@@ -43,6 +52,33 @@ export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps
         const parsedData = assembler.assemblePageData(items, viewport.height, pageNumber);
 
         // Update cache with parsed data first
+        // If we have cached translations, we can merge them immediately, but we might need to map them carefully.
+        // Assuming sentences order is consistent or we map by ID if possible.
+        // However, `translationCache` stores `SentenceTranslation` which has `id`.
+        // `ParsedPageData` has `sentences` which are `ParsedSentence`.
+
+        // If we have persistent cache, we can skip API call.
+        if (cachedTranslation && cachedTranslation.sentences.length > 0) {
+          const translatedSentencesMap = new Map(cachedTranslation.sentences.map(s => [s.originalText, s.translatedText]));
+
+          const hydratedSentences: HydratedSentence[] = parsedData.sentences.map(s => ({
+            ...s,
+            translatedText: translatedSentencesMap.get(s.sourceText) || s.sourceText
+          }));
+
+          // If cache hit, but some sentences might be missing? 
+          // Usually it should match if the fingerprint is same.
+          // However to be safe, if we have a significant mismatch we might re-translate, but for now trust cache.
+          const finalData: PageData = {
+            parsedData,
+            isLoading: false,
+            hydratedSentences,
+          };
+          setCache((prev) => new Map(prev).set(pageNumber, finalData));
+          setIsTranslating(false);
+          return finalData;
+        }
+
         setCache((prev) =>
           new Map(prev).set(pageNumber, { parsedData, isLoading: true })
         );
@@ -85,6 +121,24 @@ export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps
           };
 
           setCache((prev) => new Map(prev).set(pageNumber, finalData));
+
+          // 5. Store in persistent cache
+          // Create SentenceTranslation objects
+          const sentencesToStore: SentenceTranslation[] = hydratedSentences.map((s, idx) => ({
+            id: `${pageNumber}-${idx}`,
+            pageNumber,
+            sentenceIndex: idx,
+            originalText: s.sourceText, // Map sourceText to originalText
+            translatedText: s.translatedText || undefined,
+            createdAt: Date.now(),
+            expiresAt: Date.now() + (4 * 24 * 60 * 60 * 1000),
+            status: 'completed'
+          }));
+
+          if (fingerprint) {
+            await translationCache.storeSentences(fingerprint, sentencesToStore);
+          }
+
           return finalData;
         } else {
           throw new Error(response?.error || `Page ${pageNumber} translation failed.`);
