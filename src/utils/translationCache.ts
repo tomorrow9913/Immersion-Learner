@@ -1,7 +1,7 @@
 import type { SentenceTranslation } from '@/types/translation';
 
 const DB_NAME = 'TranslationCache';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const STORE_NAME = 'pageTranslations';
 
 interface PageTranslationCache {
@@ -72,7 +72,10 @@ class TranslationCacheDB {
   }
 
   async getPageTranslation(docId: string, pageNumber: number): Promise<PageTranslationCache | null> {
-    if (!docId) return null;
+    if (!docId) {
+      console.warn('[TranslationCache] docId가 없어 조회를 건너뜁니다.');
+      return null;
+    }
     if (!this.db) await this.init();
 
     return new Promise((resolve, reject) => {
@@ -80,7 +83,10 @@ class TranslationCacheDB {
       const store = transaction.objectStore(STORE_NAME);
       const request = store.get([docId, pageNumber]);
 
-      request.onerror = () => reject(request.error);
+      request.onerror = () => {
+        console.error('[TranslationCache] 조회 실패:', request.error);
+        reject(request.error);
+      };
       request.onsuccess = () => {
         const result = request.result as PageTranslationCache | undefined;
         if (!result) {
@@ -97,7 +103,11 @@ class TranslationCacheDB {
   }
 
   async storeSentences(docId: string, sentences: SentenceTranslation[]): Promise<void> {
-    if (!docId || sentences.length === 0) return;
+    if (!docId) {
+      console.warn('[TranslationCache] docId가 없어 저장을 건너뜁니다.');
+      return;
+    }
+    if (sentences.length === 0) return;
     const pageNumber = sentences[0].pageNumber;
 
     return this.performAtomicOperation(docId, pageNumber, async () => {
@@ -109,7 +119,10 @@ class TranslationCacheDB {
 
         const getRequest = store.get([docId, pageNumber]);
 
-        getRequest.onerror = () => reject(getRequest.error);
+        getRequest.onerror = () => {
+          console.error('[TranslationCache] 조회 실패:', getRequest.error);
+          reject(getRequest.error);
+        };
         getRequest.onsuccess = () => {
           let cache: PageTranslationCache = getRequest.result;
 
@@ -132,15 +145,24 @@ class TranslationCacheDB {
           }
 
           const putRequest = store.put(cache);
-          putRequest.onerror = () => reject(putRequest.error);
-          putRequest.onsuccess = () => resolve();
+          putRequest.onerror = () => {
+            console.error('[TranslationCache] 저장 실패:', putRequest.error);
+            reject(putRequest.error);
+          };
+          putRequest.onsuccess = () => {
+            console.log(`[TranslationCache] 저장 성공: ${docId} (Page ${pageNumber})`);
+            resolve();
+          };
         };
       });
     });
   }
 
   async storeSentence(docId: string, sentence: SentenceTranslation): Promise<void> {
-    if (!docId) return;
+    if (!docId) {
+      console.warn('[TranslationCache] docId가 없어 단일 문장 저장을 건너뜁니다.');
+      return;
+    }
     return this.performAtomicOperation(docId, sentence.pageNumber, async () => {
       if (!this.db) await this.init();
 
@@ -150,7 +172,10 @@ class TranslationCacheDB {
 
         const readRequest = store.get([docId, sentence.pageNumber]);
 
-        readRequest.onerror = () => reject(readRequest.error);
+        readRequest.onerror = () => {
+          console.error('[TranslationCache] 조회 실패 (Single):', readRequest.error);
+          reject(readRequest.error);
+        };
 
         readRequest.onsuccess = () => {
           let cache: PageTranslationCache = readRequest.result;
@@ -183,23 +208,38 @@ class TranslationCacheDB {
 
           const writeRequest = store.put(cache);
 
-          writeRequest.onerror = () => reject(writeRequest.error);
-          writeRequest.onsuccess = () => resolve();
+          writeRequest.onerror = () => {
+            console.error('[TranslationCache] 문장 저장 실패:', writeRequest.error);
+            reject(writeRequest.error);
+          };
+          writeRequest.onsuccess = () => {
+            console.log(`[TranslationCache] 문장 저장 성공: ${docId}, p${sentence.pageNumber}, s${sentence.sentenceIndex}`);
+            resolve();
+          };
         };
       });
     });
   }
 
   async deletePageTranslation(docId: string, pageNumber: number): Promise<void> {
-    if (!docId) return;
+    if (!docId) {
+      console.warn('[TranslationCache] docId가 없어 삭제를 건너뜁니다.');
+      return;
+    }
     return this.performAtomicOperation(docId, pageNumber, async () => {
       if (!this.db) await this.init();
       return new Promise((resolve, reject) => {
         const transaction = this.db!.transaction([STORE_NAME], 'readwrite');
         const store = transaction.objectStore(STORE_NAME);
         const request = store.delete([docId, pageNumber]);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve();
+        request.onerror = () => {
+          console.error('[TranslationCache] 삭제 실패:', request.error);
+          reject(request.error);
+        };
+        request.onsuccess = () => {
+          console.log(`[TranslationCache] 삭제 성공: ${docId} (Page ${pageNumber})`);
+          resolve();
+        };
       });
     });
   }

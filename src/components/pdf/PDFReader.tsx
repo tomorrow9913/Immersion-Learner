@@ -12,7 +12,7 @@ import { usePDFStorage } from '@/hooks/usePDFStorage';
 import { usePageTranslation } from '@/hooks/usePageTranslation';
 import { extractOutlineDirectly } from '@/utils/outlineUtils';
 
-import type { OutlineItem } from '@/types';
+import type { OutlineItem, OutlineDestination, RecentFile, HydratedSentence } from '@/types';
 import { Sidebar, PDFControls } from './';
 import HighlightingLayer from './HighlightingLayer';
 import { FileDropArea, MultiStackAlert } from '@/components/common';
@@ -20,8 +20,9 @@ import { TranslationPopup } from '../';
 
 import alertService from '@/services/AlertService';
 
+pdfjs.GlobalWorkerOptions.workerSrc = PDF_CONFIG.WORKER_SRC;
+
 const PDFReader = () => {
-    pdfjs.GlobalWorkerOptions.workerSrc = PDF_CONFIG.WORKER_SRC;
 
     const [file, setFile] = useState<File | string | Blob | null>(null);
     const [numPages, setNumPages] = useState<number>(0);
@@ -90,13 +91,13 @@ const PDFReader = () => {
         }
 
         loadRecentFiles();
-    }, []);
+    }, [loadRecentFiles]);
 
 
 
     useEffect(() => {
         if (textSelection.text) {
-            translateText(textSelection.text).catch((error: any) => {
+            translateText(textSelection.text).catch((error: Error) => {
                 if (error.message?.includes('Extension context invalidated') ||
                     error.message?.includes('확장 프로그램이 업데이트되었습니다')) {
                     addAlert('확장 프로그램이 업데이트되었습니다. 페이지를 새로고침 해주세요.', 'destructive');
@@ -124,12 +125,12 @@ const PDFReader = () => {
         addAlert(`PDF 로딩 실패: ${error.message}\n파일이 손상되지 않았는지 확인해주세요.`, 'destructive');
     };
 
-    const handleOutlineClick = async (dest: any, _title: string, pageNumber?: number) => {
+    const handleOutlineClick = async (dest: OutlineDestination | string, _title: string, pageNumber?: number) => {
         let targetPage: number | undefined;
 
         if (pageNumber) {
             targetPage = pageNumber;
-        } else if (dest && typeof dest === 'object' && dest.num !== undefined) {
+        } else if (dest && typeof dest === 'object' && 'num' in dest && dest.num !== undefined) {
             targetPage = dest.num + 1;
         } else if (typeof dest === 'string') {
             if (pdfDocument) {
@@ -198,7 +199,7 @@ const PDFReader = () => {
         }
     };
 
-    const handleOpenRecentFile = async (recentFile: any) => {
+    const handleOpenRecentFile = async (recentFile: RecentFile) => {
         const fileData = await openRecentFile(recentFile);
         if (fileData) {
             setFile(fileData);
@@ -228,7 +229,7 @@ const PDFReader = () => {
     // Use hydrated sentences if available, otherwise fallback to parsed sentences (with null translation)
     // This allows hitboxes to render immediately (Req-5) before translation arrives.
     const sentences = currentPageData?.hydratedSentences ||
-        (currentPageData?.parsedData?.sentences?.map(s => ({ ...s, translatedText: null })) as any[]) ||
+        (currentPageData?.parsedData?.sentences?.map(s => ({ ...s, translatedText: null })) as HydratedSentence[]) ||
         [];
     const sentenceRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -287,105 +288,105 @@ const PDFReader = () => {
                     />
 
                     <div className="flex-1 flex flex-col min-h-0 w-0">
-                        <div className="flex-1 overflow-auto bg-gray-50 p-4">
-                            <div className="bg-white shadow-lg border border-gray-200 rounded-lg flex justify-center min-h-[600px] relative">
-                                <div className="flex w-full min-h-full">
-                                    <div className="w-1/2 min-w-0">
-                                        <div className="flex justify-center h-full p-4 pr-2">
-                                            <div className="flex flex-col items-center relative">
-                                                <Document
-                                                    file={file}
-                                                    onLoadSuccess={handleDocumentLoadSuccess}
-                                                    onLoadError={onDocumentLoadError}
-                                                    className="flex flex-col items-center"
-                                                    loading={<div className="text-gray-500 animate-pulse">Loading PDF...</div>}
-                                                    error={<div className="text-red-500">Failed to load PDF.</div>}
-                                                >
-                                                    <Page
-                                                        pageNumber={pageNumber}
-                                                        renderTextLayer={false} // We are rendering our own layer
-                                                        renderAnnotationLayer={false}
-                                                        scale={PDF_CONFIG.SCALE}
-                                                        className="max-w-full"
-                                                    >
-                                                        <HighlightingLayer
-                                                            sentences={sentences}
-                                                            hoveredIndex={hoveredIndex}
-                                                            onSentenceHover={handleSentenceHover}
-                                                            scale={PDF_CONFIG.SCALE}
-                                                        />
-                                                    </Page>
-                                                </Document>
+                        <div className="flex-1 flex overflow-hidden">
+                            {/* PDF Side (Left) */}
+                            <div className="w-1/2 min-w-0 overflow-y-auto bg-gray-50 p-4">
+                                <div className="bg-white shadow-lg border border-gray-200 rounded-lg flex justify-center p-4">
+                                    <div className="flex flex-col items-center relative">
+                                        <Document
+                                            file={file}
+                                            onLoadSuccess={handleDocumentLoadSuccess}
+                                            onLoadError={onDocumentLoadError}
+                                            className="flex flex-col items-center"
+                                            loading={<div className="text-gray-500 animate-pulse">Loading PDF...</div>}
+                                            error={<div className="text-red-500">Failed to load PDF.</div>}
+                                        >
+                                            <Page
+                                                pageNumber={pageNumber}
+                                                renderTextLayer={false} // We are rendering our own layer
+                                                renderAnnotationLayer={false}
+                                                scale={PDF_CONFIG.SCALE}
+                                                className="max-w-full"
+                                            >
+                                                <HighlightingLayer
+                                                    sentences={sentences}
+                                                    hoveredIndex={hoveredIndex}
+                                                    onSentenceHover={handleSentenceHover}
+                                                    scale={PDF_CONFIG.SCALE}
+                                                />
+                                            </Page>
+                                        </Document>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Divider */}
+                            <div className="w-px bg-gray-300"></div>
+
+                            {/* Translation Side (Right) */}
+                            <div className="w-1/2 min-w-0 flex flex-col">
+                                <div className="bg-white border-b border-gray-200 p-3 flex items-center justify-between flex-shrink-0">
+                                    <h3 className="font-semibold text-gray-800 text-sm">번역</h3>
+                                    <div className="flex items-center space-x-2">
+                                        {isTranslating && (
+                                            <div className="flex items-center text-xs text-blue-600">
+                                                <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-1"></div>
+                                                번역 중...
                                             </div>
+                                        )}
+                                        <div className="text-xs text-gray-600">
+                                            {sentences.length} 문장
                                         </div>
                                     </div>
-                                    <div className="w-1/2 min-w-0 relative">
-                                        <div className="absolute inset-0 flex flex-col">
-                                            <div className="bg-white border-b border-gray-200 p-3 flex items-center justify-between flex-shrink-0">
-                                                <h3 className="font-semibold text-gray-800 text-sm">번역</h3>
-                                                <div className="flex items-center space-x-2">
-                                                    {isTranslating && (
-                                                        <div className="flex items-center text-xs text-blue-600">
-                                                            <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-1"></div>
-                                                            번역 중...
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                                    {error && (
+                                        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                                            <p className="text-sm text-red-600">{error}</p>
+
+                                        </div>
+                                    )}
+
+                                    {isTranslating && sentences.length === 0 ? (
+                                        <div className="flex items-center justify-center h-32">
+                                            <div className="flex flex-col items-center text-gray-500">
+                                                <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin mb-2"></div>
+                                                <p className="text-sm">페이지 번역 중...</p>
+                                            </div>
+                                        </div>
+                                    ) : sentences.length === 0 && !error ? (
+                                        <div className="text-gray-500 text-sm text-center py-8">
+                                            번역된 문장이 없습니다
+                                        </div>
+                                    ) : (
+                                        sentences.map((sentence) => (
+                                            <div
+                                                key={sentence.id}
+                                                ref={(el) => {
+                                                    sentenceRefs.current[sentence.id] = el;
+                                                }}
+                                                className={`border-b border-gray-100 pb-3 last:border-b-0 transition-colors ${hoveredIndex === sentence.id ? 'bg-blue-50' : ''}`}
+                                                onMouseEnter={() => setHoveredIndex(sentence.id)}
+                                                onMouseLeave={() => setHoveredIndex(null)}
+                                            >
+                                                <div className="space-y-2">
+                                                    <p className="text-sm text-gray-800 leading-relaxed">
+                                                        {sentence.sourceText}
+                                                    </p>
+                                                    {sentence.translatedText ? (
+                                                        <p className="text-sm text-blue-700 leading-relaxed bg-blue-50 p-2 rounded">
+                                                            {sentence.translatedText}
+                                                        </p>
+                                                    ) : (
+                                                        <div className="flex items-center py-2">
+                                                            <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2"></div>
+                                                            <span className="text-sm text-gray-600">번역 중...</span>
                                                         </div>
                                                     )}
-                                                    <div className="text-xs text-gray-600">
-                                                        {sentences.length} 문장
-                                                    </div>
                                                 </div>
                                             </div>
-                                            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                                                {error && (
-                                                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                                                        <p className="text-sm text-red-600">{error}</p>
-                                                    </div>
-                                                )}
-
-                                                {isTranslating && sentences.length === 0 ? (
-                                                    <div className="flex items-center justify-center h-32">
-                                                        <div className="flex flex-col items-center text-gray-500">
-                                                            <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin mb-2"></div>
-                                                            <p className="text-sm">페이지 번역 중...</p>
-                                                        </div>
-                                                    </div>
-                                                ) : sentences.length === 0 && !error ? (
-                                                    <div className="text-gray-500 text-sm text-center py-8">
-                                                        번역된 문장이 없습니다
-                                                    </div>
-                                                ) : (
-                                                    sentences.map((sentence) => (
-                                                        <div
-                                                            key={sentence.id}
-                                                            ref={(el) => {
-                                                                sentenceRefs.current[sentence.id] = el;
-                                                            }}
-                                                            className={`border-b border-gray-100 pb-3 last:border-b-0 transition-colors ${hoveredIndex === sentence.id ? 'bg-blue-50' : ''}`}
-                                                            onMouseEnter={() => setHoveredIndex(sentence.id)}
-                                                            onMouseLeave={() => setHoveredIndex(null)}
-                                                        >
-                                                            <div className="space-y-2">
-                                                                <p className="text-sm text-gray-800 leading-relaxed">
-                                                                    {sentence.sourceText}
-                                                                </p>
-                                                                {sentence.translatedText ? (
-                                                                    <p className="text-sm text-blue-700 leading-relaxed bg-blue-50 p-2 rounded">
-                                                                        {sentence.translatedText}
-                                                                    </p>
-                                                                ) : (
-                                                                    <div className="flex items-center py-2">
-                                                                        <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2"></div>
-                                                                        <span className="text-sm text-gray-600">번역 중...</span>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    ))
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="absolute left-1/2 top-0 bottom-0 w-1 bg-gray-300 shadow-lg z-8 transform -translate-x-1/2"></div>
+                                        ))
+                                    )}
                                 </div>
                             </div>
                         </div>
