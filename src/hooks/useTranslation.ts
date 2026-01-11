@@ -20,6 +20,11 @@ interface TranslationState extends TranslationData {
   error: TranslationError | null;
 }
 
+interface SaveWordResponse {
+  success: boolean;
+  error?: string;
+}
+
 export const useTranslation = () => {
   const [state, setState] = useState<TranslationState>({
     selectedText: '',
@@ -115,28 +120,6 @@ export const useTranslation = () => {
     }
   }, [updateState]);
 
-  const addToWordbook = useCallback((text: string, translatedText: string) => {
-    if (chrome.runtime?.id) {
-      chrome.runtime.sendMessage({
-        type: MESSAGE_TYPES.SAVE_WORD,
-        original: text,
-        translated: translatedText
-      }, (res) => {
-        if (res?.success) {
-          updateState({ isSaved: true });
-          setTimeout(() => {
-            window.getSelection()?.removeAllRanges();
-            resetTranslation();
-          }, UI_CONFIG.WORD_SAVE_SUCCESS_DURATION);
-        }
-      });
-    }
-  }, [updateState]);
-
-  const setSelectedText = useCallback((text: string) => {
-    updateState({ selectedText: text });
-  }, [updateState]);
-
   const resetTranslation = useCallback(() => {
     updateState({
       selectedText: '',
@@ -147,6 +130,45 @@ export const useTranslation = () => {
       showTranslation: false,
       error: null,
     });
+  }, [updateState]);
+
+  const addToWordbook = useCallback(async (text: string, translatedText: string) => {
+    if (!chrome.runtime?.id) {
+      console.warn('Chrome runtime ID not available. Cannot save to wordbook.');
+      return;
+    }
+
+    try {
+      const response: SaveWordResponse = await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({
+          type: MESSAGE_TYPES.SAVE_WORD,
+          original: text,
+          translated: translatedText
+        }, (res) => {
+          if (chrome.runtime.lastError) {
+            return reject(new Error(chrome.runtime.lastError.message));
+          }
+          resolve(res);
+        });
+      });
+
+      if (response.success) {
+        updateState({ isSaved: true });
+        setTimeout(() => {
+          window.getSelection()?.removeAllRanges();
+          resetTranslation();
+        }, UI_CONFIG.WORD_SAVE_SUCCESS_DURATION);
+      } else {
+        throw new Error(response.error || '단어장 저장에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('단어장 저장 중 오류 발생:', error);
+      // Optionally, update state to show error message to user
+    }
+  }, [updateState, resetTranslation]);
+
+  const setSelectedText = useCallback((text: string) => {
+    updateState({ selectedText: text });
   }, [updateState]);
 
   return {
