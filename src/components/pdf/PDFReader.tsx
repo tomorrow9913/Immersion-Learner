@@ -80,6 +80,7 @@ const PDFReader = () => {
     } = usePageTranslation({
         pdf: pdfDocument,
         currentPage: pageNumber,
+        docId: pdfDocument?.fingerprints[0] || '',
     });
 
     useEffect(() => {

@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { MESSAGE_TYPES } from '@/config/constants';
-import type { ParsedPageData, HydratedSentence } from '@/types';
-import type { SentenceTranslation } from '@/types/translation';
+import type { ParsedPageData, HydratedSentence, SentenceTranslation } from '@/types';
 import { PDFTextAssembler } from '@/utils/pdfTextAssembler';
 import { translationCache } from '@/utils/translationCache';
 
@@ -16,17 +15,22 @@ interface PageData {
 interface UsePageTranslationProps {
   pdf: PDFDocumentProxy | null;
   currentPage: number;
+  docId: string;
 }
 
-export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps) => {
+export const usePageTranslation = ({ pdf, currentPage, docId }: UsePageTranslationProps) => {
   const [cache, setCache] = useState<Map<number, PageData>>(new Map());
   const [isTranslating, setIsTranslating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadPageAndTranslate = useCallback(
     async (pageNumber: number): Promise<PageData | undefined> => {
-      // Check in-memory cache first
-      if (!pdf || cache.get(pageNumber)?.hydratedSentences) {
+      if (!pdf || !docId) {
+        return;
+      }
+
+      // Check component's in-memory cache first
+      if (cache.get(pageNumber)?.hydratedSentences) {
         return cache.get(pageNumber);
       }
 
@@ -35,13 +39,6 @@ export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps
 
       try {
         const page = await pdf.getPage(pageNumber);
-        const fingerprint = (pdf as any).fingerprint;
-
-        // 1. Check persistent cache
-        let cachedTranslation = null;
-        if (fingerprint) {
-          cachedTranslation = await translationCache.getPageTranslation(fingerprint, pageNumber);
-        }
 
         // 1. Extract Text & Usage of PDFTextAssembler.assemblePageData
         const textContent = await page.getTextContent();
@@ -51,39 +48,34 @@ export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps
         const assembler = new PDFTextAssembler();
         const parsedData = assembler.assemblePageData(items, viewport.height, pageNumber);
 
-        // Update cache with parsed data first
-        // If we have cached translations, we can merge them immediately, but we might need to map them carefully.
-        // Assuming sentences order is consistent or we map by ID if possible.
-        // However, `translationCache` stores `SentenceTranslation` which has `id`.
-        // `ParsedPageData` has `sentences` which are `ParsedSentence`.
-
-        // If we have persistent cache, we can skip API call.
-        if (cachedTranslation && cachedTranslation.sentences.length > 0) {
-          const translatedSentencesMap = new Map(cachedTranslation.sentences.map(s => [s.originalText, s.translatedText]));
-
-          const hydratedSentences: HydratedSentence[] = parsedData.sentences.map(s => ({
-            ...s,
-            translatedText: translatedSentencesMap.get(s.sourceText) || s.sourceText
-          }));
-
-          // If cache hit, but some sentences might be missing? 
-          // Usually it should match if the fingerprint is same.
-          // However to be safe, if we have a significant mismatch we might re-translate, but for now trust cache.
-          const finalData: PageData = {
-            parsedData,
-            isLoading: false,
-            hydratedSentences,
-          };
-          setCache((prev) => new Map(prev).set(pageNumber, finalData));
-          setIsTranslating(false);
-          return finalData;
-        }
-
+        // Update cache with parsed data first to show highlights immediately
         setCache((prev) =>
           new Map(prev).set(pageNumber, { parsedData, isLoading: true })
         );
 
-        // 2. Prepare Translation Request
+        // 2. Check persistent cache (IndexedDB)
+        const cachedPage = await translationCache.getPageTranslation(docId, pageNumber);
+
+        if (cachedPage) {
+            const translationsMap = new Map(cachedPage.sentences.map(s => [s.sentenceIndex, s.translatedText]));
+            const hydratedSentences: HydratedSentence[] = parsedData.sentences.map(
+                (sentence) => ({
+                    ...sentence,
+                    translatedText: translationsMap.get(sentence.id) || null, // sentence.id is the index
+                })
+            );
+            
+            const finalData: PageData = {
+                parsedData,
+                isLoading: false,
+                hydratedSentences,
+            };
+            setCache((prev) => new Map(prev).set(pageNumber, finalData));
+            setIsTranslating(false);
+            return finalData;
+        }
+
+        // 3. If not in cache, request translation
         const sourceTexts = parsedData.sentences.map((s) => s.sourceText);
 
         if (sourceTexts.length === 0) {
@@ -96,23 +88,34 @@ export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps
           return emptyData;
         }
 
-        // 3. Request Translation
         const response = await chrome.runtime.sendMessage({
           type: MESSAGE_TYPES.GET_TRANSLATION_AND_DETAILS,
           text: sourceTexts.join('\n'), // API expects a single block of text
         });
 
         if (response?.success) {
-          // 4. Hydration & Safety Guard
           const translatedLines = (response.translatedText || '').split('\n');
 
           const hydratedSentences: HydratedSentence[] = parsedData.sentences.map(
             (sentence, idx) => ({
               ...sentence,
-              // Use translated text, or fallback to source text if missing (Safety guard)
               translatedText: translatedLines[idx] || sentence.sourceText,
             })
           );
+          
+          // 4. Store in persistent cache
+          const sentencesToCache: SentenceTranslation[] = hydratedSentences.map((hs) => ({
+              id: String(hs.id),
+              originalText: hs.sourceText,
+              translatedText: hs.translatedText || '',
+              pageNumber: pageNumber,
+              sentenceIndex: hs.id,
+              createdAt: Date.now(),
+              expiresAt: Date.now() + (4 * 24 * 60 * 60 * 1000), // 4 days
+              status: 'completed',
+          }));
+          
+          await translationCache.storeSentences(docId, sentencesToCache);
 
           const finalData: PageData = {
             parsedData,
@@ -121,24 +124,6 @@ export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps
           };
 
           setCache((prev) => new Map(prev).set(pageNumber, finalData));
-
-          // 5. Store in persistent cache
-          // Create SentenceTranslation objects
-          const sentencesToStore: SentenceTranslation[] = hydratedSentences.map((s, idx) => ({
-            id: `${pageNumber}-${idx}`,
-            pageNumber,
-            sentenceIndex: idx,
-            originalText: s.sourceText, // Map sourceText to originalText
-            translatedText: s.translatedText || undefined,
-            createdAt: Date.now(),
-            expiresAt: Date.now() + (4 * 24 * 60 * 60 * 1000),
-            status: 'completed'
-          }));
-
-          if (fingerprint) {
-            await translationCache.storeSentences(fingerprint, sentencesToStore);
-          }
-
           return finalData;
         } else {
           throw new Error(response?.error || `Page ${pageNumber} translation failed.`);
@@ -148,10 +133,8 @@ export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps
         const message = err instanceof Error ? err.message : String(err);
         setError(message);
 
-        // Even on error, we might want to show the original sentences? 
-        // For now, following standard error handling.
         const errorData: PageData = {
-          parsedData: { pageNumber, sentences: [] }, // Or keep partial?
+          parsedData: { pageNumber, sentences: [] },
           isLoading: false,
           error: message,
         };
@@ -161,7 +144,7 @@ export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps
         setIsTranslating(false);
       }
     },
-    [pdf, cache]
+    [pdf, docId, cache]
   );
 
   const prefetchNextPage = useCallback(() => {
@@ -175,13 +158,12 @@ export const usePageTranslation = ({ pdf, currentPage }: UsePageTranslationProps
   }, [pdf, currentPage, cache, loadPageAndTranslate]);
 
   useEffect(() => {
-    if (pdf && !cache.has(currentPage)) {
+    if (pdf && docId && !cache.has(currentPage)) {
       loadPageAndTranslate(currentPage);
     }
-  }, [pdf, currentPage, cache, loadPageAndTranslate]);
+  }, [pdf, docId, currentPage, cache, loadPageAndTranslate]);
 
   useEffect(() => {
-    // Check if the current page has been translated to trigger prefetch
     const currentPageData = cache.get(currentPage);
     if (currentPageData && currentPageData.hydratedSentences) {
       prefetchNextPage();
