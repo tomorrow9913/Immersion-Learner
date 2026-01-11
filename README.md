@@ -16,6 +16,19 @@ This project is built with a modern tech stack including React, TypeScript, and 
 - **🚀 New Tab Override**: The new tab page is transformed into a dashboard for your learning activities.
 - **🔧 Customizable**: Configure the extension to suit your learning style.
 
+## Image
+<img width="1899" height="801" alt="image" src="https://github.com/user-attachments/assets/cbf098bc-0214-4bf3-9cd8-12107f4a42a5" />
+<img width="901" height="313" alt="image" src="https://github.com/user-attachments/assets/f226aad5-2421-46ce-bab3-9b31b84fa5bb" />
+<img width="1897" height="806" alt="image" src="https://github.com/user-attachments/assets/aec8c087-2b6e-49b2-96e2-0fd28f5bfe7b" />
+<img width="1914" height="811" alt="image" src="https://github.com/user-attachments/assets/57027ca8-ba8b-467b-a84e-5bc7665eb7aa" />
+<img width="1895" height="806" alt="image" src="https://github.com/user-attachments/assets/fd08a8be-8a8a-4504-82db-324756fb5761" />
+<img width="1894" height="804" alt="image" src="https://github.com/user-attachments/assets/020aa7ac-50bf-4fe3-b08e-06dd9532d53a" />
+<img width="1898" height="804" alt="image" src="https://github.com/user-attachments/assets/704a62c8-c8f7-445b-9bda-e1544e94cdc9" />
+
+
+
+
+
 ## 🛠️ Tech Stack
 
 - **Framework**: React 19
