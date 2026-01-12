@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { pdfjs, Document, Page } from 'react-pdf';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { PanelLeft, PanelRight } from 'lucide-react'; // Import icons
 import 'react-pdf/dist/Page/TextLayer.css';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import { PDF_CONFIG } from '@/config/constants';
@@ -34,6 +35,12 @@ const PDFReader = () => {
 
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isDragOver, setIsDragOver] = useState(false);
+
+    // Manual Resizing and Collapsing states
+    const [pdfPanelWidth, setPdfPanelWidth] = useState(50); // in percentage
+    const [isDragging, setIsDragging] = useState(false);
+    const [isTranslationCollapsed, setIsTranslationCollapsed] = useState(false);
+    const dragStartRef = useRef<{ clientX: number; initialPdfPanelWidth: number } | null>(null);
 
     const {
         translation,
@@ -112,6 +119,53 @@ const PDFReader = () => {
 
     const pdfContainerRef = useRef<HTMLDivElement>(null);
     const translationContainerRef = useRef<HTMLDivElement>(null);
+
+    // Resizing Handlers
+    const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDragging(true);
+        dragStartRef.current = {
+            clientX: e.clientX,
+            initialPdfPanelWidth: pdfPanelWidth,
+        };
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+        if (!isDragging || !dragStartRef.current) return;
+
+        const deltaX = e.clientX - dragStartRef.current.clientX;
+        // Assuming the main container where the flex layout is applied
+        // takes full width of the window, adjust if it's nested
+        const containerWidth = window.innerWidth; 
+
+        const newPdfPanelWidth = dragStartRef.current.initialPdfPanelWidth + (deltaX / containerWidth) * 100;
+
+        // Constrain the width between a reasonable range (e.g., 20% to 80%)
+        if (newPdfPanelWidth > 20 && newPdfPanelWidth < 80) {
+            setPdfPanelWidth(newPdfPanelWidth);
+        }
+    };
+
+    const handleMouseUp = () => {
+        setIsDragging(false);
+        dragStartRef.current = null;
+    };
+
+    useEffect(() => {
+        if (isDragging) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+        } else {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        }
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isDragging, pdfPanelWidth]);
+
 
     const handleDocumentLoadSuccess = (pdf: PDFDocumentProxy) => {
         setNumPages(pdf.numPages);
@@ -233,6 +287,10 @@ const PDFReader = () => {
         window.location.reload();
     };
 
+    const toggleTranslationPanel = () => {
+        setIsTranslationCollapsed((prev) => !prev);
+    };
+
     // Use hydrated sentences if available, otherwise fallback to parsed sentences (with null translation)
     // This allows hitboxes to render immediately (Req-5) before translation arrives.
     const sentences = currentPageData?.hydratedSentences ||
@@ -305,10 +363,14 @@ const PDFReader = () => {
                         onOutlineItemClick={handleOutlineClick}
                     />
 
-                    <div className="flex-1 flex flex-col min-h-0 w-0 pb-20">
+                    <div className="flex-1 flex flex-col min-h-0 w-0 pb-20 relative">
                         <div className="flex-1 flex overflow-hidden">
                             {/* PDF Side (Left) */}
-                            <div ref={pdfContainerRef} className="w-1/2 min-w-0 overflow-y-auto bg-gray-50 p-4">
+                            <div
+                                ref={pdfContainerRef}
+                                className="min-w-0 overflow-y-auto bg-gray-50 p-4"
+                                style={{ width: isTranslationCollapsed ? '100%' : `${pdfPanelWidth}%` }}
+                            >
                                 <div className="bg-white shadow-lg border border-gray-200 rounded-lg flex justify-center p-4">
                                     <div className="flex flex-col items-center relative">
                                         <Document
@@ -340,74 +402,103 @@ const PDFReader = () => {
                             </div>
 
                             {/* Divider */}
-                            <div className="w-px bg-gray-300"></div>
+                            {!isTranslationCollapsed && (
+                                <div
+                                    className="w-1.5 bg-gray-300 hover:bg-blue-500 transition-colors duration-200 cursor-col-resize flex items-center justify-center"
+                                    onMouseDown={handleMouseDown}
+                                >
+                                    <div className="w-1 h-8 bg-gray-400 rounded-full" />
+                                </div>
+                            )}
 
                             {/* Translation Side (Right) */}
-                            <div className="w-1/2 min-w-0 flex flex-col">
-                                <div className="bg-white border-b border-gray-200 p-3 flex items-center justify-between flex-shrink-0">
-                                    <h3 className="font-semibold text-gray-800 text-sm">번역</h3>
-                                    <div className="flex items-center space-x-2">
-                                        {isTranslating && (
-                                            <div className="flex items-center text-xs text-blue-600">
-                                                <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-1"></div>
-                                                번역 중...
+                            {!isTranslationCollapsed && (
+                                <div
+                                    className="min-w-0 flex flex-col"
+                                    style={{ width: `${100 - pdfPanelWidth}%` }}
+                                >
+                                    <div className="bg-white border-b border-gray-200 p-3 flex items-center justify-between flex-shrink-0">
+                                        <h3 className="font-semibold text-gray-800 text-sm">번역</h3>
+                                        <div className="flex items-center space-x-2">
+                                            {isTranslating && (
+                                                <div className="flex items-center text-xs text-blue-600">
+                                                    <div className="w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-1"></div>
+                                                    번역 중...
+                                                </div>
+                                            )}
+                                            <div className="text-xs text-gray-600">
+                                                {sentences.length} 문장
                                             </div>
-                                        )}
-                                        <div className="text-xs text-gray-600">
-                                            {sentences.length} 문장
+                                            <button
+                                                onClick={toggleTranslationPanel}
+                                                className="p-1 rounded hover:bg-gray-200"
+                                                title="번역 패널 닫기"
+                                            >
+                                                                                        <PanelRight size={16} />
+                                            </button>
                                         </div>
                                     </div>
-                                </div>
-                                <div ref={translationContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3">
-                                    {error && (
-                                        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                                            <p className="text-sm text-red-600">{error}</p>
+                                    <div ref={translationContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+                                        {error && (
+                                            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                                                <p className="text-sm text-red-600">{error}</p>
 
-                                        </div>
-                                    )}
-
-                                    {isTranslating && sentences.length === 0 ? (
-                                        <div className="flex items-center justify-center h-32">
-                                            <div className="flex flex-col items-center text-gray-500">
-                                                <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin mb-2"></div>
-                                                <p className="text-sm">페이지 번역 중...</p>
                                             </div>
-                                        </div>
-                                    ) : sentences.length === 0 && !error ? (
-                                        <div className="text-gray-500 text-sm text-center py-8">
-                                            번역된 문장이 없습니다
-                                        </div>
-                                    ) : (
-                                        sentences.map((sentence) => (
-                                            <div
-                                                key={sentence.id}
-                                                ref={(el) => {
-                                                    sentenceRefs.current[sentence.id] = el;
-                                                }}
-                                                className={`border-b border-gray-100 pb-3 last:border-b-0 transition-colors ${hoveredIndex === sentence.id ? 'bg-blue-50 outline outline-1 outline-blue-900 rounded-md' : ''}`}
-                                                onMouseEnter={() => handleTranslatedSentenceHover(sentence.id)}
-                                                onMouseLeave={() => handleTranslatedSentenceHover(null)}
-                                            >
-                                                <div className="space-y-2">
-                                                    <p className="text-sm text-gray-800 leading-relaxed">
-                                                        {sentence.sourceText}
-                                                    </p>
-                                                    {sentence.translatedText ? (
-                                                        <p className="text-sm text-blue-700 leading-relaxed bg-blue-50 p-2 rounded">
-                                                            {sentence.translatedText}
-                                                        </p>
-                                                    ) : (
-                                                        <div className="flex items-center py-2">
-                                                            <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2"></div>
-                                                            <span className="text-sm text-gray-600">번역 중...</span>
-                                                        </div>
-                                                    )}
+                                        )}
+
+                                        {isTranslating && sentences.length === 0 ? (
+                                            <div className="flex items-center justify-center h-32">
+                                                <div className="flex flex-col items-center text-gray-500">
+                                                    <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin mb-2"></div>
+                                                    <p className="text-sm">페이지 번역 중...</p>
                                                 </div>
                                             </div>
-                                        ))
-                                    )}
+                                        ) : sentences.length === 0 && !error ? (
+                                            <div className="text-gray-500 text-sm text-center py-8">
+                                                번역된 문장이 없습니다
+                                            </div>
+                                        ) : (
+                                            sentences.map((sentence) => (
+                                                <div
+                                                    key={sentence.id}
+                                                    ref={(el) => {
+                                                        sentenceRefs.current[sentence.id] = el;
+                                                    }}
+                                                    className={`border-b border-gray-100 pb-3 last:border-b-0 transition-colors ${hoveredIndex === sentence.id ? 'bg-blue-50 outline outline-1 outline-blue-900 rounded-md' : ''}`}
+                                                    onMouseEnter={() => handleTranslatedSentenceHover(sentence.id)}
+                                                    onMouseLeave={() => handleTranslatedSentenceHover(null)}
+                                                >
+                                                    <div className="space-y-2">
+                                                        <p className="text-sm text-gray-800 leading-relaxed">
+                                                            {sentence.sourceText}
+                                                        </p>
+                                                        {sentence.translatedText ? (
+                                                            <p className="text-sm text-blue-700 leading-relaxed bg-blue-50 p-2 rounded">
+                                                                {sentence.translatedText}
+                                                            </p>
+                                                        ) : (
+                                                            <div className="flex items-center py-2">
+                                                                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2"></div>
+                                                                <span className="text-sm text-gray-600">번역 중...</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
+                            )}
+
+                            {isTranslationCollapsed && (
+                                <button
+                                    onClick={toggleTranslationPanel}
+                                    className="absolute top-1/2 right-0 transform -translate-y-1/2 z-30 bg-blue-600 text-white p-2 rounded-l-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+                                    title="번역 패널 열기"
+                                >
+                                    <PanelLeft size={16} />
+                                </button>
+                            )}
                         </div>
 
                         <div className="fixed inset-x-0 bottom-4 flex justify-center z-20">
