@@ -1,16 +1,1 @@
-[
-  {
-    "id": 1,
-    "priority": 1,
-    "condition": {
-      "regexFilter": ".*\\.pdf$",
-      "resourceTypes": ["main_frame"]
-    },
-    "action": {
-      "type": "redirect",
-      "redirect": {
-        "regexSubstitution": "chrome-extension://__MSG_extension_id__/newtab.html?pdf=\\0"
-      }
-    }
-  }
-]
+[]
