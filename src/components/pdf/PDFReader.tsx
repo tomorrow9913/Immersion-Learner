@@ -110,6 +110,9 @@ const PDFReader = () => {
         }
     }, [textSelection.text, translateText, addAlert]);
 
+    const pdfContainerRef = useRef<HTMLDivElement>(null);
+    const translationContainerRef = useRef<HTMLDivElement>(null);
+
     const handleDocumentLoadSuccess = (pdf: PDFDocumentProxy) => {
         setNumPages(pdf.numPages);
         setPdfDocument(pdf);
@@ -119,6 +122,9 @@ const PDFReader = () => {
         if (!isNaN(newPage) && newPage >= 1 && newPage <= numPages) {
             setPageNumber(newPage);
             updateLastPage(file, newPage);
+
+            pdfContainerRef.current?.scrollTo(0, 0);
+            translationContainerRef.current?.scrollTo(0, 0);
         }
     };
 
@@ -233,11 +239,22 @@ const PDFReader = () => {
         (currentPageData?.parsedData?.sentences?.map(s => ({ ...s, translatedText: null })) as HydratedSentence[]) ||
         [];
     const sentenceRefs = useRef<(HTMLDivElement | null)[]>([]);
+    const highlightRefs = useRef<(HTMLDivElement | null)[]>([]);
 
     const handleSentenceHover = (id: number | null) => {
         setHoveredIndex(id);
         if (id !== null && sentenceRefs.current[id]) {
             sentenceRefs.current[id]?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest',
+            });
+        }
+    };
+
+    const handleTranslatedSentenceHover = (id: number | null) => {
+        setHoveredIndex(id);
+        if (id !== null && highlightRefs.current[id]) {
+            highlightRefs.current[id]?.scrollIntoView({
                 behavior: 'smooth',
                 block: 'nearest',
             });
@@ -291,7 +308,7 @@ const PDFReader = () => {
                     <div className="flex-1 flex flex-col min-h-0 w-0">
                         <div className="flex-1 flex overflow-hidden">
                             {/* PDF Side (Left) */}
-                            <div className="w-1/2 min-w-0 overflow-y-auto bg-gray-50 p-4">
+                            <div ref={pdfContainerRef} className="w-1/2 min-w-0 overflow-y-auto bg-gray-50 p-4">
                                 <div className="bg-white shadow-lg border border-gray-200 rounded-lg flex justify-center p-4">
                                     <div className="flex flex-col items-center relative">
                                         <Document
@@ -314,6 +331,7 @@ const PDFReader = () => {
                                                     hoveredIndex={hoveredIndex}
                                                     onSentenceHover={handleSentenceHover}
                                                     scale={PDF_CONFIG.SCALE}
+                                                    highlightRefs={highlightRefs}
                                                 />
                                             </Page>
                                         </Document>
@@ -340,7 +358,7 @@ const PDFReader = () => {
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                                <div ref={translationContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3">
                                     {error && (
                                         <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                                             <p className="text-sm text-red-600">{error}</p>
@@ -367,8 +385,8 @@ const PDFReader = () => {
                                                     sentenceRefs.current[sentence.id] = el;
                                                 }}
                                                 className={`border-b border-gray-100 pb-3 last:border-b-0 transition-colors ${hoveredIndex === sentence.id ? 'bg-blue-50' : ''}`}
-                                                onMouseEnter={() => setHoveredIndex(sentence.id)}
-                                                onMouseLeave={() => setHoveredIndex(null)}
+                                                onMouseEnter={() => handleTranslatedSentenceHover(sentence.id)}
+                                                onMouseLeave={() => handleTranslatedSentenceHover(null)}
                                             >
                                                 <div className="space-y-2">
                                                     <p className="text-sm text-gray-800 leading-relaxed">

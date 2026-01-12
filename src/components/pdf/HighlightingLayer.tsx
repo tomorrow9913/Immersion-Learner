@@ -7,6 +7,7 @@ interface HighlightingLayerProps {
   hoveredIndex: number | null;
   onSentenceHover: (sentenceId: number | null) => void;
   className?: string;
+  highlightRefs?: React.MutableRefObject<(HTMLDivElement | null)[]>;
 }
 
 // Optimization: Render each sentence as a memoized component
@@ -15,19 +16,22 @@ const HighlightedSentenceItem = memo(({
   scale,
   isHovered,
   onEnter,
-  onLeave
+  onLeave,
+  highlightRef
 }: {
   sentence: HydratedSentence;
   scale: number;
   isHovered: boolean;
   onEnter: (id: number) => void;
   onLeave: () => void;
+  highlightRef: (el: HTMLDivElement | null) => void;
 }) => {
   return (
     <>
       {/* 1. Pre-calculated Overlay (Hitbox) - Always processed for interaction */}
       {sentence.rects.map((rect, i) => (
         <div
+          ref={i === 0 ? highlightRef : null}
           key={`hitbox-${sentence.id}-${i}`}
           style={{
             position: 'absolute',
@@ -72,7 +76,8 @@ const HighlightingLayer: React.FC<HighlightingLayerProps> = ({
   sentences,
   hoveredIndex,
   onSentenceHover,
-  className = ''
+  className = '',
+  highlightRefs
 }) => {
   return (
     <div className={`absolute inset-0 z-10 pointer-events-none ${className}`}>
@@ -84,6 +89,11 @@ const HighlightingLayer: React.FC<HighlightingLayerProps> = ({
           isHovered={hoveredIndex === sentence.id}
           onEnter={onSentenceHover}
           onLeave={() => onSentenceHover(null)}
+          highlightRef={(el) => {
+            if (highlightRefs?.current) {
+              highlightRefs.current[sentence.id] = el;
+            }
+          }}
         />
       ))}
     </div>
