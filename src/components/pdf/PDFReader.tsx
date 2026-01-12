@@ -384,7 +384,7 @@ const PDFReader = () => {
                                                 ref={(el) => {
                                                     sentenceRefs.current[sentence.id] = el;
                                                 }}
-                                                className={`border-b border-gray-100 pb-3 last:border-b-0 transition-colors ${hoveredIndex === sentence.id ? 'bg-blue-50' : ''}`}
+                                                className={`border-b border-gray-100 pb-3 last:border-b-0 transition-colors ${hoveredIndex === sentence.id ? 'bg-blue-50 outline outline-1 outline-blue-900' : ''}`}
                                                 onMouseEnter={() => handleTranslatedSentenceHover(sentence.id)}
                                                 onMouseLeave={() => handleTranslatedSentenceHover(null)}
                                             >
