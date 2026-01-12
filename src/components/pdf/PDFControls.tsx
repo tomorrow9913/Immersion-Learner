@@ -1,6 +1,5 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Upload, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface PDFControlsProps {
@@ -57,85 +56,87 @@ const PDFControls: React.FC<PDFControlsProps> = ({
   };
 
   return (
-    <Card className="shadow-sm border-t border-gray-200 rounded-none bg-white">
-      <CardContent className="p-4">
-        <div className="w-full flex justify-between items-center px-2">
-          <div className="flex items-center gap-2 text-lg font-bold text-gray-800">
-            <span>Page</span>
-            <input 
-              type="number" 
-              value={pageNumber} 
-              min={1} 
-              max={numPages} 
-              onChange={handlePageInputChange} 
-              className="w-16 px-2 py-1 border border-gray-300 rounded text-center text-sm" 
-            />
-            <span>of {numPages}</span>
-          </div>
-          
-          <div className="flex gap-4 items-center">
-            <Button
-              onClick={handleFileInputClick}
-              className="text-sm font-medium"
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              다른 PDF 열기
-            </Button>
-            <input
-              id="controls-file-input"
-              data-testid="controls-file-input"
-              type="file"
-              accept=".pdf"
-              onChange={handleFileChange}
-              className="hidden"
-            />
-            
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={pageNumber <= 1}
-                onClick={goToPreviousPage}
-              >
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                Prev
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={pageNumber >= numPages}
-                onClick={goToNextPage}
-              >
-                Next
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-              
-              {/* 번역 상태 및 재시도 버튼 */}
-              {isTranslationFailed && (
-                <div className="ml-4 flex flex-col gap-2">
-                  <span className="text-xs text-red-600 font-medium">번역 실패</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onRetryTranslation}
-                    disabled={isTranslating}
-                  >
-                    {isTranslating ? '번역 중...' : '다시 시도'}
-                  </Button>
-                </div>
-              )}
-              
-              {translationError && (
-                <div className="ml-4 flex items-center">
-                  <span className="text-xs text-red-600 font-medium mr-2">에러</span>
-                  <span className="text-xs text-gray-600">{translationError}</span>
-                </div>
-              )}
-            </div>
-          </div>
+    <div className="bg-white/80 backdrop-blur-sm border border-gray-200/50 rounded-full shadow-lg p-2 flex items-center gap-4">
+      <div className="flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="rounded-full"
+          disabled={pageNumber <= 1}
+          onClick={goToPreviousPage}
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </Button>
+        <div className="flex items-center gap-1 text-sm font-medium text-gray-700">
+          <input
+            type="number"
+            value={pageNumber}
+            min={1}
+            max={numPages}
+            onChange={handlePageInputChange}
+            className="w-12 bg-transparent text-center focus:outline-none"
+          />
+          <span>/ {numPages}</span>
         </div>
-      </CardContent>
-    </Card>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="rounded-full"
+          disabled={pageNumber >= numPages}
+          onClick={goToNextPage}
+        >
+          <ChevronRight className="h-5 w-5" />
+        </Button>
+      </div>
+
+      <div className="h-6 w-px bg-gray-300"></div>
+
+      <div className="flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="rounded-full"
+          onClick={handleFileInputClick}
+        >
+          <Upload className="h-5 w-5" />
+        </Button>
+        <input
+          id="controls-file-input"
+          data-testid="controls-file-input"
+          type="file"
+          accept=".pdf"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+      </div>
+
+      {isTranslationFailed && (
+        <>
+          <div className="h-6 w-px bg-gray-300"></div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-red-600 font-semibold">번역 실패</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRetryTranslation}
+              disabled={isTranslating}
+              className="rounded-full"
+            >
+              {isTranslating ? '번역 중...' : '다시 시도'}
+            </Button>
+          </div>
+        </>
+      )}
+
+      {translationError && !isTranslationFailed && (
+        <>
+          <div className="h-6 w-px bg-gray-300"></div>
+          <div className="flex items-center">
+            <span className="text-xs text-red-600 font-semibold">{translationError}</span>
+          </div>
+        </>
+      )}
+    </div>
   );
 };
 
