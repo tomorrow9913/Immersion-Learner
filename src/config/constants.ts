@@ -67,7 +67,8 @@ export type TabType = typeof TABS[keyof typeof TABS];
 // 번역 큐 설정
 export const QUEUE_CONFIG = {
   MIN_DELAY_MS: 200,
-  FOUR_DAYS_MS: 4 * 24 * 60 * 60 * 1000
+  FOUR_DAYS_MS: 4 * 24 * 60 * 60 * 1000,
+  CONCURRENCY_LIMIT: 3
 } as const;
 
 // 네트워크 설정

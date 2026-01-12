@@ -43,6 +43,7 @@ export interface TranslationQueueStatus {
 export interface TranslationRequest {
   id: string;
   text: string;
+  pageNumber: number; // Add pageNumber here
   priority: number;
   resolve: (result: SentenceTranslation) => void;
   reject: (error: Error) => void;
